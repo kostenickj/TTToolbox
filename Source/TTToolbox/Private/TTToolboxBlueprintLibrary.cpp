@@ -21,6 +21,7 @@
 #include "TTToolboxBlueprintLibrary.h"
 
 // Unreal Engine includes
+#include "AnimationBlueprintLibrary.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "Engine/AssetManager.h"
 
@@ -1082,7 +1083,7 @@ static FName retrieveContainerNameForCurve(const UAnimSequenceBase* AnimaSequenc
   return NAME_None;
 }
 
-bool UTTToolboxBlueprintLibrary::CopyAnimMontageCurves(UAnimMontage* SourceAnimMontage, UAnimMontage* TargetAnimMontage)
+bool UTTToolboxBlueprintLibrary::CopyAnimMontageCurves(UAnimSequenceBase* SourceAnimMontage, UAnimMontage* TargetAnimMontage)
 {
   // check input arguments
   if (!IsValid(SourceAnimMontage) || !IsValid(TargetAnimMontage))

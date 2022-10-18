@@ -146,7 +146,7 @@ public:
 	// AnimMontage functions
 
 	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
-	static bool CopyAnimMontageCurves(UAnimMontage* SourceAnimMontage, UAnimMontage* TargetAnimMontage);
+	static bool CopyAnimMontageCurves(UAnimSequenceBase* SourceAnimMontage, UAnimMontage* TargetAnimMontage);
 
 	// AnimSequence functions
 
