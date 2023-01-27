@@ -22,74 +22,15 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
-#include "IKRigDefinition.h"
+#include "TTToolboxTypes.h"
 #include "TTToolboxBlueprintLibrary.generated.h"
 
 // forward declarations
 class USkeleton;
 class UIKRigDefinition;
+class UControlRig;
+class UControlRigBlueprint;
 
-
-// Helper stucture that is exposed to Blueprints to be independent from the ik rig implementation.
-// Additionally, this can be reused in data tables to store the bone chains.
-USTRUCT(Blueprintable)
-struct TTTOOLBOX_API FBoneChain_BP
-{
-	GENERATED_BODY()
-
-	FBoneChain_BP() = default;
-
-	FBoneChain_BP(const FBoneChain& BoneChain)
-		: ChainName(BoneChain.ChainName)
-		, StartBone(BoneChain.StartBone.BoneName)
-		, EndBone(BoneChain.EndBone.BoneName)
-		, IKGoalName(BoneChain.IKGoalName)
-	{}
-
-	// stores the bone chain name that will be shown in the ik rig asset editor window
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneChain)
-	FName ChainName = NAME_None;
-
-	// stores the beginning bone name of the bone chain
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneChain)
-	FName StartBone = NAME_None;
-
-	// stores the ending bone name of the bone chain
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BoneChain)
-	FName EndBone = NAME_None;
-
-	// stores the ik goal name that is visible in the ik rig asset editor window
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = IK)
-	FName IKGoalName = NAME_None;
-};
-
-
-USTRUCT(Blueprintable)
-struct TTTOOLBOX_API FTTNewBone_BP
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TTToolbox")
-	FName NewBoneName = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TTToolbox")
-	FName ParentBone = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TTToolbox")
-	FName ConstraintBone = NAME_None;
-};
-
-USTRUCT(Blueprintable)
-struct TTTOOLBOX_API FTTConstraintBone_BP
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TTToolbox")
-	FName ModifiedBone = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TTToolbox")
-	FName ConstraintBone = NAME_None;
-};
 
 UCLASS()
 class TTTOOLBOX_API UTTToolboxBlueprintLibrary : public UBlueprintFunctionLibrary
@@ -127,6 +68,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
 	static bool CheckForMissingCurveNames(const TArray<FName>& CurveNamesToCheck, USkeleton* Skeleton);
 
+	// returns true if the given 'SkeletonCurveName' exists in the specified 'Skeleton', otherwise false.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool HasSkeletonCurve(USkeleton* Skeleton, const FName& SkeletonCurveName);
+
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool DumpSkeletonBlendProfile(USkeleton* Skeleton);
+
+	// will add a new 'BlendProfile' to the given 'Skeleton' with the 'BlendProfileName'. If 'Overwrite' is set to true it will overwrite the already existing blend values otherwise returns with false.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool AddSkeletonBlendProfile(USkeleton* Skeleton, const FName& BlendProfileName, const FTTBlendProfile_BP& BlendProfile, bool Overwrite = false);
+
+	// adds the given 'SkeletonCurveName' to the specified 'Skeleton' and returns if successful, false if the given 'SkeletonCurveName' already exists.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool AddSkeletonCurve(USkeleton* Skeleton, const FName& SkeletonCurveName);
+
+	// dumps all groups and montages slots for the given 'Skeleton'. Returns true on success, false otherwise.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool DumpGroupsAndSlots(USkeleton* Skeleton);
+
+	// adds the given 'SlotGroup' to the specified 'Skeleton'. Returns true on success, false otherwise.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool AddSkeletonSlotGroup(USkeleton* Skeleton, const FTTMontageSlotGroup& SlotGroup);
+
 	// adds the fiven 'NewBones' to the given 'Skeleton' and it's connected skeletal meshes.
 	// NOTE: Sadly Unreal Engine does come with lot's of assertions and it is very hard to implement this feature in a save way,
 	// the function removes all virtual bones and adds them after again after the unweighted bones are added to the skeletal meshes.
@@ -143,6 +107,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
 	static bool AddRootBone(USkeleton* Skeleton);
 
+	// ControlRig functions
+
+	// updates the given 'ControlRigBlueprint' with the specified 'SkeletalMesh'. Returns true on success, false otherwise.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool UpdateControlRigBlueprintPreviewMesh(UControlRigBlueprint* ControlRigBlueprint, USkeletalMesh* SkeletalMesh);
+
 	// AnimMontage functions
 
 	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
@@ -153,6 +123,14 @@ public:
 	// forces animation sequence recompression, which will also reconstraint the virtual bones
 	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
 	static void RequestAnimationRecompress(USkeleton* Skeleton);
+
+	// forces animation sequence recompression for the given 'AnimSequences', which will also reconstraint the virtual bones.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static void RequestAnimSequencesRecompression(TArray<UAnimSequence*> AnimSequences);
+
+	// sets the interpolation mode for the given 'AnimSequence'.
+	UFUNCTION(BlueprintCallable, Category = "TTToolbox")
+	static bool SetAnimSequenceInterpolation(UAnimSequence* AnimSequence, EAnimInterpolationType AnimInterpolationType);
 
 	// IK Rig functions
 
