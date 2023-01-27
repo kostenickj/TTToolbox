@@ -1430,7 +1430,7 @@ bool UTTToolboxBlueprintLibrary::UpdateControlRigBlueprintPreviewMesh(UControlRi
     return true;
 }
 
-bool UTTToolboxBlueprintLibrary::CopyAnimMontageCurves(UAnimMontage* SourceAnimMontage, UAnimMontage* TargetAnimMontage)
+bool UTTToolboxBlueprintLibrary::CopyAnimMontageCurves(UAnimSequenceBase* SourceAnimMontage, UAnimMontage* TargetAnimMontage)
 {
   // check input arguments
   if (!IsValid(SourceAnimMontage) || !IsValid(TargetAnimMontage))
