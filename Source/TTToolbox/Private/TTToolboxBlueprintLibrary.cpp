@@ -1544,7 +1544,7 @@ bool UTTToolboxBlueprintLibrary::AddIKBoneChains(UIKRigDefinition* IKRigDefiniti
     return false;
   }
 
-  auto ikRigController = UIKRigController::GetIKRigController(IKRigDefinition);
+  auto ikRigController = UIKRigController::GetController(IKRigDefinition);
   if (!IsValid(ikRigController))
   {
     UE_LOG(LogTemp, Error, TEXT("During getting the IKRigController for %s in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
@@ -1575,7 +1575,7 @@ bool UTTToolboxBlueprintLibrary::AddIKBoneChains(UIKRigDefinition* IKRigDefiniti
 #if ENGINE_MAJOR_VERSION ==	5 &&  ENGINE_MINOR_VERSION < 1
     ikRigController->AddRetargetChain(boneChain.ChainName, boneChain.StartBone, boneChain.EndBone);
 #elif ENGINE_MAJOR_VERSION ==	5 &&  ENGINE_MINOR_VERSION >= 1
-    ikRigController->AddRetargetChain({ boneChain.ChainName, boneChain.StartBone, boneChain.EndBone });
+    ikRigController->AddRetargetChain({ boneChain.ChainName, boneChain.StartBone, boneChain.EndBone, boneChain.IKGoalName });
 #endif
 
   }
@@ -1593,7 +1593,7 @@ bool UTTToolboxBlueprintLibrary::SetIKBoneChainGoal(UIKRigDefinition* IKRigDefin
   }
 
   // get the IK rig controller
-  auto ikRigController = UIKRigController::GetIKRigController(IKRigDefinition);
+  auto ikRigController = UIKRigController::GetController(IKRigDefinition);
   if (!IsValid(ikRigController))
   {
     UE_LOG(LogTemp, Error, TEXT("During getting the IKRigController for %s in \"SetIKBoneChainGoal\" failed."), *(IKRigDefinition->GetFullName()));
