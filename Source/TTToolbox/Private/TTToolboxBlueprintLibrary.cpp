@@ -361,6 +361,18 @@ bool UTTToolboxBlueprintLibrary::DumpSkeletonCurveNames(USkeleton* Skeleton)
   }
 
   // get curves names
+  TArray<FName> curveNames;
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 3
+
+  //Get curve names for version 5.3+
+  if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
+  {
+    AnimCurveMetaData->ForEachCurveMetaData([&curveNames](FName name, const FCurveMetaData& metaData) {
+      curveNames.Add(name);
+      });
+  }
+#else
+  //Get curve names for version < 5.3
   auto curveMapping = Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName);
   if (!curveMapping)
   {
@@ -369,7 +381,6 @@ bool UTTToolboxBlueprintLibrary::DumpSkeletonCurveNames(USkeleton* Skeleton)
   }
 
   // get curve names
-  TArray<FName> curveNames;
   curveMapping->Iterate([&curveNames](const FSmartNameMappingIterator& Iterator)
     {
       FName curveName;
@@ -383,25 +394,20 @@ bool UTTToolboxBlueprintLibrary::DumpSkeletonCurveNames(USkeleton* Skeleton)
       }
     }
   );
+#endif
 
   // prepare dump string
-  FString dumpString = "(";
+  FString dumpString;
+  dumpString += "(";
 
   uint32 count = 0;
-  for (auto curveName : curveNames)
-  {
-    if (count > 0)
-    {
-      dumpString += ",";
+  for (auto& curveName : curveNames) {
+    if (count > 0) {
+      dumpString += ", ";
     }
-
-    dumpString += "\"";
-    dumpString += curveName.ToString();
-    dumpString += "\"";
-
+    dumpString += FString::Printf(TEXT("\"%s\""), *curveName.ToString());
     count++;
   }
-
   dumpString += ")";
 
   // dump curve names
@@ -422,8 +428,22 @@ bool UTTToolboxBlueprintLibrary::CheckForMissingCurveNames(const TArray<FName>& 
     UE_LOG(LogTemp, Error, TEXT("Called \"CheckForMissingCurveNames\" with invalid skeleton."));
     return false;
   }
-
+  bool hasNoMissingCurveNames = true;
   // get curve names from target skeleton
+  TArray<FName> curveNames;
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 3
+
+  //Get curve names for version 5.3+
+  if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
+  {
+    AnimCurveMetaData->ForEachCurveMetaData([&curveNames](FName name, const FCurveMetaData& metaData) {
+      curveNames.Add(name);
+      });
+  }
+
+#else
+
+  // Get curve names for version < 5.3
   auto curveMapping = Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName);
   if (!curveMapping)
   {
@@ -431,13 +451,12 @@ bool UTTToolboxBlueprintLibrary::CheckForMissingCurveNames(const TArray<FName>& 
     return false;
   }
 
-  TArray<FName> skeletonCurveNames;
-  curveMapping->Iterate([&skeletonCurveNames](const FSmartNameMappingIterator& Iterator)
+  curveMapping->Iterate([&curveNames](const FSmartNameMappingIterator& Iterator)
     {
       FName curveName;
       if (Iterator.GetName(curveName))
       {
-        skeletonCurveNames.Add(curveName);
+        curveNames.Add(curveName);
       }
       else
       {
@@ -446,23 +465,14 @@ bool UTTToolboxBlueprintLibrary::CheckForMissingCurveNames(const TArray<FName>& 
     }
   );
 
-  // check if curves are missing in the target skeleton
-  bool hasNoMissingCurveNames = true;
-  for (auto& curveName : CurveNamesToCheck)
-  {
-    if (skeletonCurveNames.Find(curveName) == INDEX_NONE)
-    {
-      if (hasNoMissingCurveNames)
-      {
-        UE_LOG(LogTemp, Error, TEXT("The following curves are missing in skeleton \"%s\":"), *(Skeleton->GetFullName()));
-      }
-
-      UE_LOG(LogTemp, Error, TEXT("  %s"), *curveName.ToString());
-
+#endif
+  //check if curves are missing in the target skeleton
+  for (auto& curveName : CurveNamesToCheck) {
+    if (!curveNames.Contains(curveName)) {
+      UE_LOG(LogTemp, Error, TEXT("CurveName %s is missing in skeleton %s when calling CheckForMissingCurveNames"), *curveName.ToString(), *(Skeleton->GetFullName()));
       hasNoMissingCurveNames = false;
     }
   }
-
   return hasNoMissingCurveNames;
 }
 
