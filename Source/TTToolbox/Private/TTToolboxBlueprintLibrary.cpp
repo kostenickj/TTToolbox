@@ -29,16 +29,17 @@
 
 #include "Commandlets/CompressAnimationsCommandlet.h"
 
-#include "IKRigDefinition.h"
+#include "Rig/IKRigDefinition.h"
 #include "RigEditor/IKRigController.h"
 
-#include "ARFilter.h"
-#include "AssetRegistryModule.h"
+#include "AssetRegistry/ARFilter.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 
 #include "ControlRigBlueprint.h"
 #include "ControlRig.h"
 
 #include "Animation/BlendProfile.h"
+#include "Rigs/RigHierarchyController.h"
 
 #if WITH_EDITOR
 #include "HAL/PlatformApplicationMisc.h"
@@ -491,17 +492,11 @@ bool UTTToolboxBlueprintLibrary::HasSkeletonCurve(USkeleton* Skeleton, const FNa
         return false;
     }
 
-    // get curve names from Skeleton
-    auto curveMapping = Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName);
-    if (!curveMapping)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to get curve mapping in \"DumpSkeletonCurveNames\". Please contact the author of this plugin."));
-        return false;
-    }
-
-    // is the SkeletonCurveName already present?
-    FSmartName outName;
-    return curveMapping->FindSmartName(SkeletonCurveName, outName);
+  if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
+  {
+    return AnimCurveMetaData->GetCurveMetaData(SkeletonCurveName) != nullptr;
+  }
+    return false;
 }
 
 bool UTTToolboxBlueprintLibrary::DumpSkeletonBlendProfile(USkeleton* Skeleton)
@@ -650,10 +645,8 @@ bool UTTToolboxBlueprintLibrary::AddSkeletonCurve(USkeleton* Skeleton, const FNa
         UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonCurve\" with invalid \"SkeletonCurveName\" (\"None\")."));
         return false;
     }
-
-    // add the SkeletonCurveName
-    FSmartName outName;
-    return Skeleton->AddSmartNameAndModify(USkeleton::AnimCurveMappingName, SkeletonCurveName, outName);
+  
+  return Skeleton->AddCurveMetaData(SkeletonCurveName);
 }
 
 bool UTTToolboxBlueprintLibrary::AddSkeletonSlotGroup(USkeleton* Skeleton, const FTTMontageSlotGroup& SlotGroup)
@@ -1119,7 +1112,7 @@ void UTTToolboxBlueprintLibrary::RequestAnimationRecompress(USkeleton* Skeleton)
     {
       if (animSequence->GetSkeleton()->GetFName() == Skeleton->GetFName())
       {
-        animSequence->RequestAsyncAnimRecompression();
+        animSequence->BeginCacheDerivedDataForCurrentPlatform();
       }
     }
   }
@@ -1135,7 +1128,7 @@ void UTTToolboxBlueprintLibrary::RequestAnimSequencesRecompression(TArray<UAnimS
     }
     else
     {
-      animSequence->RequestAsyncAnimRecompression();
+      animSequence->BeginCacheDerivedDataForCurrentPlatform();
     }
   }
 }
@@ -1399,22 +1392,6 @@ bool UTTToolboxBlueprintLibrary::AddRootBone(USkeleton* Skeleton)
   return true;
 }
 
-static FName retrieveContainerNameForCurve(const UAnimSequenceBase* AnimaSequenceBase, const FName& CurveName)
-{
-  checkf(AnimaSequenceBase != nullptr, TEXT("Invalid Animation Sequence ptr"));
-  const FName Names[(int32)ESmartNameContainerType::SNCT_MAX] = { USkeleton::AnimCurveMappingName, USkeleton::AnimTrackCurveMappingName };
-  for (int32 Index = 0; Index < (int32)ESmartNameContainerType::SNCT_MAX; ++Index)
-  {
-    const FSmartNameMapping* CurveMapping = AnimaSequenceBase->GetSkeleton()->GetSmartNameContainer(Names[Index]);
-    if (CurveMapping && CurveMapping->Exists(CurveName))
-    {
-      return Names[Index];
-    }
-  }
-
-  return NAME_None;
-}
-
 bool UTTToolboxBlueprintLibrary::UpdateControlRigBlueprintPreviewMesh(UControlRigBlueprint* ControlRigBlueprint, USkeletalMesh* SkeletalMesh)
 {
     if (!IsValid(ControlRigBlueprint))
@@ -1455,16 +1432,7 @@ bool UTTToolboxBlueprintLibrary::CopyAnimMontageCurves(UAnimSequenceBase* Source
 
   for (auto& sourceCurve : SourceAnimMontage->GetCurveData().FloatCurves)
   {
-    FSmartName curveSmartName;
-
-    const FName containerName = retrieveContainerNameForCurve(TargetAnimMontage, sourceCurve.Name.DisplayName);
-    if (!TargetAnimMontage->GetSkeleton()->GetSmartNameByName(containerName, sourceCurve.Name.DisplayName, curveSmartName))
-    {
-      UE_LOG(LogTemp, Error, TEXT("Failed to get smart name for curve %s"), *sourceCurve.Name.DisplayName.ToString());
-      continue;
-    }
-
-    const FAnimationCurveIdentifier curveId(curveSmartName, ERawCurveTrackTypes::RCT_Float);
+    const FAnimationCurveIdentifier curveId = FAnimationCurveIdentifier(sourceCurve.GetName(), ERawCurveTrackTypes::RCT_Float);
     targetController.AddCurve(curveId);
     targetController.SetCurveKeys(curveId, sourceCurve.FloatCurve.GetConstRefOfKeys());
   }
@@ -1640,7 +1608,7 @@ static TArray<USkeletalMesh*> getAllSkeletalMeshes(USkeleton* Skeleton)
   TArray<USkeletalMesh*> skeletalMeshes;
 
   FARFilter filter;
-  filter.ClassNames.Add(USkeletalMesh::StaticClass()->GetFName());
+  filter.ClassPaths.Add(USkeletalMesh::StaticClass()->GetClassPathName());
   filter.bRecursiveClasses = true;
   const FString skeletonString = FAssetData(Skeleton).GetExportTextName();
   filter.TagsAndValues.Add(USkeletalMesh::GetSkeletonMemberName(), skeletonString);
