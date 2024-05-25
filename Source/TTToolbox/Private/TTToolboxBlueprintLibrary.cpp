@@ -36,6 +36,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 
 #include "ControlRigBlueprint.h"
+#include "Engine/SkinnedAssetCommon.h"
 #include "ControlRig.h"
 
 #include "Animation/BlendProfile.h"
@@ -55,323 +56,326 @@ static const FName gs_rootBoneName("root");
 
 bool UTTToolboxBlueprintLibrary::DumpVirtualBones(USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"DumpVirtualBones\" with invalid skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpVirtualBones\" with invalid skeleton."));
+		return false;
+	}
 
-  if (Skeleton->GetVirtualBones().Num() <= 0)
-  {
-    UE_LOG(LogTemp, Error, TEXT("\"%s\" does not contain any virtual bones."), *(Skeleton->GetFullName()));
-    return false;
-  }
+	if (Skeleton->GetVirtualBones().Num() <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("\"%s\" does not contain any virtual bones."), *(Skeleton->GetFullName()));
+		return false;
+	}
 
-  // prepare string for virtual bones
-  FString dumpString;
-  dumpString += "(";
+	// prepare string for virtual bones
+	FString dumpString;
+	dumpString += "(";
 
-  uint32 count = 0;
-  for (auto& virtualBone : Skeleton->GetVirtualBones())
-  {
-    if (count > 0)
-    {
-      dumpString += ",";
-    }
+	uint32 count = 0;
+	for (auto& virtualBone : Skeleton->GetVirtualBones())
+	{
+		if (count > 0)
+		{
+			dumpString += ",";
+		}
 
-    dumpString += "(";
+		dumpString += "(";
 
-    dumpString += "VirtualBoneName=\"";
-    dumpString += virtualBone.VirtualBoneName.ToString();
-    dumpString += "\",";
+		dumpString += "VirtualBoneName=\"";
+		dumpString += virtualBone.VirtualBoneName.ToString();
+		dumpString += "\",";
 
-    dumpString += "SourceBoneName=\"";
-    dumpString += virtualBone.SourceBoneName.ToString();
-    dumpString += "\",";
+		dumpString += "SourceBoneName=\"";
+		dumpString += virtualBone.SourceBoneName.ToString();
+		dumpString += "\",";
 
-    dumpString += "TargetBoneName=\"";
-    dumpString += virtualBone.TargetBoneName.ToString();
-    dumpString += "\"";
+		dumpString += "TargetBoneName=\"";
+		dumpString += virtualBone.TargetBoneName.ToString();
+		dumpString += "\"";
 
-    dumpString += ")";
+		dumpString += ")";
 
-    count++;
-  }
+		count++;
+	}
 
-  dumpString += ")";
+	dumpString += ")";
 
-  // dump virtual bones
-  UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
+	// dump virtual bones
+	UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
 
-  // copy virtual bones to the clipboard
+	// copy virtual bones to the clipboard
 #if WITH_EDITOR
-  FPlatformApplicationMisc::ClipboardCopy(*dumpString);
+	FPlatformApplicationMisc::ClipboardCopy(*dumpString);
 #endif
 
-  return true;
+	return true;
 }
 
-bool UTTToolboxBlueprintLibrary::AddVirtualBone(
-  const FName& VirtualBoneName,
-  const FName& SourceBoneName,
-  const FName& TargetBoneName,
-  USkeleton* Skeleton)
+bool UTTToolboxBlueprintLibrary::AddVirtualBone
+(
+	const FName& VirtualBoneName
+	, const FName& SourceBoneName
+	, const FName& TargetBoneName
+	, USkeleton* Skeleton
+)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"AddVirtualBone\" with invalid skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddVirtualBone\" with invalid skeleton."));
+		return false;
+	}
 
-  bool isValidVirtualBone = true;
-  isValidVirtualBone &= VirtualBoneName != NAME_None;
-  if (VirtualBoneName == NAME_None)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called AddVirtualBone with invalid VirtualBoneName."));
-  }
+	bool isValidVirtualBone = true;
+	isValidVirtualBone &= VirtualBoneName != NAME_None;
+	if (VirtualBoneName == NAME_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called AddVirtualBone with invalid VirtualBoneName."));
+	}
 
-  isValidVirtualBone &= TargetBoneName != NAME_None;
-  if (TargetBoneName == NAME_None)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called AddVirtualBone with invalid TargetBoneName."));
-  }
+	isValidVirtualBone &= TargetBoneName != NAME_None;
+	if (TargetBoneName == NAME_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called AddVirtualBone with invalid TargetBoneName."));
+	}
 
-  isValidVirtualBone &= SourceBoneName != NAME_None;
-  if (SourceBoneName == NAME_None)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called AddVirtualBone with invalid SourceBoneName."));
-  }
+	isValidVirtualBone &= SourceBoneName != NAME_None;
+	if (SourceBoneName == NAME_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called AddVirtualBone with invalid SourceBoneName."));
+	}
 
-  if (!isValidVirtualBone)
-  {
-    return false;
-  }
+	if (!isValidVirtualBone)
+	{
+		return false;
+	}
 
-  // check if the source and target bones exists already in the skeleton
-  bool boneMissingInSkeleton = false;
-  if (Skeleton->GetReferenceSkeleton().FindBoneIndex(SourceBoneName) == INDEX_NONE)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Skeleton \"%s\" does not provide the SourceBone \"%s\". Adding the virtual bone \"%s\" is impossible."),
-      *Skeleton->GetPathName(), *SourceBoneName.ToString(), *VirtualBoneName.ToString());
-    boneMissingInSkeleton = true;
-  }
+	// check if the source and target bones exists already in the skeleton
+	bool boneMissingInSkeleton = false;
+	if (Skeleton->GetReferenceSkeleton().FindBoneIndex(SourceBoneName) == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Skeleton \"%s\" does not provide the SourceBone \"%s\". Adding the virtual bone \"%s\" is impossible."), *Skeleton->GetPathName(), *SourceBoneName.ToString(), *VirtualBoneName.ToString());
+		boneMissingInSkeleton = true;
+	}
 
-  if (Skeleton->GetReferenceSkeleton().FindBoneIndex(TargetBoneName) == INDEX_NONE)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Skeleton \"%s\" does not provide the TargetBone \"%s\". Adding the virtual bone \"%s\" is impossible."),
-      *Skeleton->GetPathName(), *TargetBoneName.ToString(), *VirtualBoneName.ToString());
-    boneMissingInSkeleton = true;
-  }
+	if (Skeleton->GetReferenceSkeleton().FindBoneIndex(TargetBoneName) == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Skeleton \"%s\" does not provide the TargetBone \"%s\". Adding the virtual bone \"%s\" is impossible."), *Skeleton->GetPathName(), *TargetBoneName.ToString(), *VirtualBoneName.ToString());
+		boneMissingInSkeleton = true;
+	}
 
-  if (boneMissingInSkeleton)
-  {
-    return false;
-  }
+	if (boneMissingInSkeleton)
+	{
+		return false;
+	}
 
-  // check if virtual bone already exists
-  for (auto& virtualBone : Skeleton->GetVirtualBones())
-  {
-    if (virtualBone.VirtualBoneName == VirtualBoneName &&
-        virtualBone.SourceBoneName == SourceBoneName &&
-        virtualBone.TargetBoneName == TargetBoneName)
-    {
-      UE_LOG(LogTemp, Error, TEXT("virtual bone: %s, source = %s, target = %s already exists in skeleton \"%s\"."),
-            *VirtualBoneName.ToString(), *SourceBoneName.ToString(), *TargetBoneName.ToString(), *(Skeleton->GetFullName()));
-      return false;
-    }
-  }
+	// check if virtual bone already exists
+	for (auto& virtualBone : Skeleton->GetVirtualBones())
+	{
+		if (virtualBone.VirtualBoneName == VirtualBoneName &&
+			virtualBone.SourceBoneName == SourceBoneName &&
+			virtualBone.TargetBoneName == TargetBoneName)
+		{
+			UE_LOG(LogTemp, Error, TEXT("virtual bone: %s, source = %s, target = %s already exists in skeleton \"%s\"."), *VirtualBoneName.ToString(), *SourceBoneName.ToString(), *TargetBoneName.ToString(), *(Skeleton->GetFullName()));
+			return false;
+		}
+	}
 
-  // try to add virtual bone
-  FName newVirtualBoneName = VirtualBoneName;
-  if (!Skeleton->AddNewVirtualBone(SourceBoneName, TargetBoneName, newVirtualBoneName))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Failed to add virtual bone in skeleton \"%s\"."), *(Skeleton->GetFullName()));
-    return false;
-  }
-  Skeleton->RenameVirtualBone(newVirtualBoneName, VirtualBoneName);
+	// try to add virtual bone
+	FName newVirtualBoneName = VirtualBoneName;
+	if (!Skeleton->AddNewVirtualBone(SourceBoneName, TargetBoneName, newVirtualBoneName))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to add virtual bone in skeleton \"%s\"."), *(Skeleton->GetFullName()));
+		return false;
+	}
+	Skeleton->RenameVirtualBone(newVirtualBoneName, VirtualBoneName);
 
-  // mark skeleton as dirty
-  Skeleton->Modify();
+	// mark skeleton as dirty
+	Skeleton->Modify();
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::DumpSockets(USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"DumpSockets\" with invalid skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpSockets\" with invalid skeleton."));
+		return false;
+	}
 
-  if (Skeleton->Sockets.Num() <= 0)
-  {
-    UE_LOG(LogTemp, Error, TEXT("\"%s\" does not contain any sockets."), *(Skeleton->GetFullName()));
-    return false;
-  }
+	if (Skeleton->Sockets.Num() <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("\"%s\" does not contain any sockets."), *(Skeleton->GetFullName()));
+		return false;
+	}
 
-  // prepare string for sockets
-  FString dumpString;
-  if (Skeleton->Sockets.Num() > 1)
-  {
-    dumpString += "(";
-  }
+	// prepare string for sockets
+	FString dumpString;
+	if (Skeleton->Sockets.Num() > 1)
+	{
+		dumpString += "(";
+	}
 
-  uint32 count = 0;
-  for (auto socket : Skeleton->Sockets)
-  {
-    if (IsValid(socket))
-    {
-      if (count > 0)
-      {
-        dumpString += ",";
-      }
+	uint32 count = 0;
+	for (auto socket : Skeleton->Sockets)
+	{
+		if (IsValid(socket))
+		{
+			if (count > 0)
+			{
+				dumpString += ",";
+			}
 
-      dumpString += "(";
+			dumpString += "(";
 
-      dumpString += "BoneName=\"";
-      dumpString += socket->BoneName.ToString();
-      dumpString += "\",";
+			dumpString += "BoneName=\"";
+			dumpString += socket->BoneName.ToString();
+			dumpString += "\",";
 
-      dumpString += "SocketName=\"";
-      dumpString += socket->SocketName.ToString();
-      dumpString += "\",";
+			dumpString += "SocketName=\"";
+			dumpString += socket->SocketName.ToString();
+			dumpString += "\",";
 
-      dumpString += "RelativeTransform=(Rotation=(";
+			dumpString += "RelativeTransform=(Rotation=(";
 
-      const auto rotation = socket->RelativeRotation.Quaternion();
-      FString rotationString = "X=";
-      rotationString += FString::SanitizeFloat(rotation.X);
-      rotationString += ",Y=";
-      rotationString += FString::SanitizeFloat(rotation.Y);
-      rotationString += ",Z=";
-      rotationString += FString::SanitizeFloat(rotation.Z);
-      rotationString += ",W=";
-      rotationString += FString::SanitizeFloat(rotation.W);
-      dumpString += rotationString;
+			const auto rotation = socket->RelativeRotation.Quaternion();
+			FString rotationString = "X=";
+			rotationString += FString::SanitizeFloat(rotation.X);
+			rotationString += ",Y=";
+			rotationString += FString::SanitizeFloat(rotation.Y);
+			rotationString += ",Z=";
+			rotationString += FString::SanitizeFloat(rotation.Z);
+			rotationString += ",W=";
+			rotationString += FString::SanitizeFloat(rotation.W);
+			dumpString += rotationString;
 
-      dumpString += "),Translation=(";
-      dumpString += FVectorToString(socket->RelativeLocation);
+			dumpString += "),Translation=(";
+			dumpString += FVectorToString(socket->RelativeLocation);
 
-      dumpString += "),Scale3D=(";
-      dumpString += FVectorToString(socket->RelativeScale);
-      dumpString += ")))";
+			dumpString += "),Scale3D=(";
+			dumpString += FVectorToString(socket->RelativeScale);
+			dumpString += ")))";
 
-      count++;
-    }
-  }
+			count++;
+		}
+	}
 
-  if (Skeleton->Sockets.Num() > 1)
-  {
-    dumpString += ")";
-  }
+	if (Skeleton->Sockets.Num() > 1)
+	{
+		dumpString += ")";
+	}
 
-  // dump sockets
-  UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
+	// dump sockets
+	UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
 
-  // copy sockets to the clipboard
+	// copy sockets to the clipboard
 #if WITH_EDITOR
-  FPlatformApplicationMisc::ClipboardCopy(*dumpString);
+	FPlatformApplicationMisc::ClipboardCopy(*dumpString);
 #endif
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::AddSocket(const FName& BoneName, const FName& SocketName, const FTransform& RelativeTransform, USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"AddSocket\" with invalid skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSocket\" with invalid skeleton."));
+		return false;
+	}
 
-  if (BoneName == NAME_None)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"AddSocket\" with invalid bone name."));
-    return false;
-  }
+	if (BoneName == NAME_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSocket\" with invalid bone name."));
+		return false;
+	}
 
-  if (SocketName == NAME_None)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"AddSocket\" with invalid socket name."));
-    return false;
-  }
+	if (SocketName == NAME_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSocket\" with invalid socket name."));
+		return false;
+	}
 
-  if (UTTToolboxBlueprintLibrary::HasSocket(SocketName, Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("\"%s\" does already contain the socket \"%s\"."), *(Skeleton->GetFullName()), *SocketName.ToString());
-    return false;
-  }
+	if (UTTToolboxBlueprintLibrary::HasSocket(SocketName, Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("\"%s\" does already contain the socket \"%s\"."), *(Skeleton->GetFullName()), *SocketName.ToString());
+		return false;
+	}
 
-  // introduce the socket to the skeleton
-  auto socket = NewObject<USkeletalMeshSocket>(Skeleton);
-  socket->BoneName = BoneName;
-  socket->SocketName = SocketName;
-  socket->RelativeLocation = RelativeTransform.GetLocation();
-  socket->RelativeRotation = RelativeTransform.GetRotation().Rotator();
-  socket->RelativeScale = RelativeTransform.GetScale3D();
-  Skeleton->Sockets.Add(socket);
+	// introduce the socket to the skeleton
+	auto socket = NewObject<USkeletalMeshSocket>(Skeleton);
+	socket->BoneName = BoneName;
+	socket->SocketName = SocketName;
+	socket->RelativeLocation = RelativeTransform.GetLocation();
+	socket->RelativeRotation = RelativeTransform.GetRotation().Rotator();
+	socket->RelativeScale = RelativeTransform.GetScale3D();
+	Skeleton->Sockets.Add(socket);
 
-  // notify the editor that the skeleton was changed
-  Skeleton->Modify();
+	// notify the editor that the skeleton was changed
+	Skeleton->Modify();
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::HasSocket(const FName& SocketName, USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"HasSocket\" with invalid skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"HasSocket\" with invalid skeleton."));
+		return false;
+	}
 
-  if (SocketName == NAME_None)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"HasSocket\" with invalid socket name."));
-    return false;
-  }
+	if (SocketName == NAME_None)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"HasSocket\" with invalid socket name."));
+		return false;
+	}
 
-  // check if socket is already present
-  for (auto socket : Skeleton->Sockets)
-  {
-    if (IsValid(socket))
-    {
-      if (socket->SocketName == SocketName)
-      {
-        return true;
-      }
-    }
-  }
+	// check if socket is already present
+	for (auto socket : Skeleton->Sockets)
+	{
+		if (IsValid(socket))
+		{
+			if (socket->SocketName == SocketName)
+			{
+				return true;
+			}
+		}
+	}
 
-  return false;
+	return false;
 }
 
 bool UTTToolboxBlueprintLibrary::DumpSkeletonCurveNames(USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"DumpSkeletonCurveNames\" with invalid skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpSkeletonCurveNames\" with invalid skeleton."));
+		return false;
+	}
 
-  // get curves names
-  TArray<FName> curveNames;
+	// get curves names
+	TArray<FName> curveNames;
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 3
 
-  //Get curve names for version 5.3+
-  if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
-  {
-    AnimCurveMetaData->ForEachCurveMetaData([&curveNames](FName name, const FCurveMetaData& metaData) {
-      curveNames.Add(name);
-      });
-  }
+	//Get curve names for version 5.3+
+	if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
+	{
+		AnimCurveMetaData->ForEachCurveMetaData
+		(
+			[&curveNames](FName name, const FCurveMetaData& metaData)
+			{
+				curveNames.Add(name);
+			}
+		);
+	}
 #else
   //Get curve names for version < 5.3
   auto curveMapping = Skeleton->GetSmartNameContainer(USkeleton::AnimCurveMappingName);
@@ -397,50 +401,56 @@ bool UTTToolboxBlueprintLibrary::DumpSkeletonCurveNames(USkeleton* Skeleton)
   );
 #endif
 
-  // prepare dump string
-  FString dumpString;
-  dumpString += "(";
+	// prepare dump string
+	FString dumpString;
+	dumpString += "(";
 
-  uint32 count = 0;
-  for (auto& curveName : curveNames) {
-    if (count > 0) {
-      dumpString += ", ";
-    }
-    dumpString += FString::Printf(TEXT("\"%s\""), *curveName.ToString());
-    count++;
-  }
-  dumpString += ")";
+	uint32 count = 0;
+	for (auto& curveName : curveNames)
+	{
+		if (count > 0)
+		{
+			dumpString += ", ";
+		}
+		dumpString += FString::Printf(TEXT("\"%s\""), *curveName.ToString());
+		count++;
+	}
+	dumpString += ")";
 
-  // dump curve names
-  UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
+	// dump curve names
+	UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
 
 #if WITH_EDITOR
-  FPlatformApplicationMisc::ClipboardCopy(*dumpString);
+	FPlatformApplicationMisc::ClipboardCopy(*dumpString);
 #endif
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::CheckForMissingCurveNames(const TArray<FName>& CurveNamesToCheck, USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"CheckForMissingCurveNames\" with invalid skeleton."));
-    return false;
-  }
-  bool hasNoMissingCurveNames = true;
-  // get curve names from target skeleton
-  TArray<FName> curveNames;
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"CheckForMissingCurveNames\" with invalid skeleton."));
+		return false;
+	}
+	bool hasNoMissingCurveNames = true;
+	// get curve names from target skeleton
+	TArray<FName> curveNames;
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 3
 
-  //Get curve names for version 5.3+
-  if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
-  {
-    AnimCurveMetaData->ForEachCurveMetaData([&curveNames](FName name, const FCurveMetaData& metaData) {
-      curveNames.Add(name);
-      });
-  }
+	//Get curve names for version 5.3+
+	if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
+	{
+		AnimCurveMetaData->ForEachCurveMetaData
+		(
+			[&curveNames](FName name, const FCurveMetaData& metaData)
+			{
+				curveNames.Add(name);
+			}
+		);
+	}
 
 #else
 
@@ -467,670 +477,676 @@ bool UTTToolboxBlueprintLibrary::CheckForMissingCurveNames(const TArray<FName>& 
   );
 
 #endif
-  //check if curves are missing in the target skeleton
-  for (auto& curveName : CurveNamesToCheck) {
-    if (!curveNames.Contains(curveName)) {
-      UE_LOG(LogTemp, Error, TEXT("CurveName %s is missing in skeleton %s when calling CheckForMissingCurveNames"), *curveName.ToString(), *(Skeleton->GetFullName()));
-      hasNoMissingCurveNames = false;
-    }
-  }
-  return hasNoMissingCurveNames;
+	//check if curves are missing in the target skeleton
+	for (auto& curveName : CurveNamesToCheck)
+	{
+		if (!curveNames.Contains(curveName))
+		{
+			UE_LOG(LogTemp, Error, TEXT("CurveName %s is missing in skeleton %s when calling CheckForMissingCurveNames"), *curveName.ToString(), *(Skeleton->GetFullName()));
+			hasNoMissingCurveNames = false;
+		}
+	}
+	return hasNoMissingCurveNames;
 }
 
 bool UTTToolboxBlueprintLibrary::HasSkeletonCurve(USkeleton* Skeleton, const FName& SkeletonCurveName)
 {
-    // check input arguments
-    if (!IsValid(Skeleton))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"HasSkeletonCurve\" with invalid \"Skeleton\"."));
-        return false;
-    }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"HasSkeletonCurve\" with invalid \"Skeleton\"."));
+		return false;
+	}
 
-    if (SkeletonCurveName.IsNone())
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"HasSkeletonCurve\" with invalid \"SkeletonCurveName\" (\"None\")."));
-        return false;
-    }
+	if (SkeletonCurveName.IsNone())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"HasSkeletonCurve\" with invalid \"SkeletonCurveName\" (\"None\")."));
+		return false;
+	}
 
-  if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
-  {
-    return AnimCurveMetaData->GetCurveMetaData(SkeletonCurveName) != nullptr;
-  }
-    return false;
+	if (const UAnimCurveMetaData* AnimCurveMetaData = Skeleton->GetAssetUserData<UAnimCurveMetaData>())
+	{
+		return AnimCurveMetaData->GetCurveMetaData(SkeletonCurveName) != nullptr;
+	}
+	return false;
 }
 
 bool UTTToolboxBlueprintLibrary::DumpSkeletonBlendProfile(USkeleton* Skeleton)
 {
-    // check input arguments
-    if (!IsValid(Skeleton))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"DumpSkeletonBlendProfile\" with invalid \"Skeleton\"."));
-        return false;
-    }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpSkeletonBlendProfile\" with invalid \"Skeleton\"."));
+		return false;
+	}
 
-    // convert blend profiles to a string
-    FString dumpString = "(";
-    uint32 count = 0;
-    for (auto& blendProfile : Skeleton->BlendProfiles)
-    {
-        if (!blendProfile)
-        {
-            UE_LOG(LogTemp, Error, TEXT("Found invalid blend profile while dumping. Please create an issue here https://github.com/tuatec/TTToolbox/issues"));
-            continue;
-        }
+	// convert blend profiles to a string
+	FString dumpString = "(";
+	uint32 count = 0;
+	for (auto& blendProfile : Skeleton->BlendProfiles)
+	{
+		if (!blendProfile)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Found invalid blend profile while dumping. Please create an issue here https://github.com/tuatec/TTToolbox/issues"));
+			continue;
+		}
 
-        if (count > 0)
-        {
-            dumpString += ",(";
-        }
-        else
-        {
-            dumpString += "(";
-        }
+		if (count > 0)
+		{
+			dumpString += ",(";
+		}
+		else
+		{
+			dumpString += "(";
+		}
 
-        // name
-        dumpString += "\"";
+		// name
+		dumpString += "\"";
 #if ENGINE_MAJOR_VERSION ==	5 &&  ENGINE_MINOR_VERSION < 1
         dumpString += blendProfile->GetName();
 #elif ENGINE_MAJOR_VERSION ==	5 &&  ENGINE_MINOR_VERSION >= 1
-        dumpString += blendProfile.GetName();
+		dumpString += blendProfile.GetName();
 #endif
-        dumpString += "\", ";
+		dumpString += "\", ";
 
-        if (blendProfile)
-        {
-            dumpString += "(";
-            dumpString += "BlendProfileMode=";
-            dumpString += UEnum::GetValueAsString<EBlendProfileMode>(blendProfile->GetMode()).Replace(TEXT("EBlendProfileMode::"), TEXT(""));
+		if (blendProfile)
+		{
+			dumpString += "(";
+			dumpString += "BlendProfileMode=";
+			const UEnum* EnumPtr = StaticEnum<EBlendProfileMode>();
+			dumpString += EnumPtr->GetNameStringByIndex(static_cast<int32>(blendProfile->GetMode())).Replace(TEXT("EBlendProfileMode::"), TEXT(""));
 
-            dumpString += ",BlendValues=(";
-            uint32 boneCount = 0;
-            for (auto& bone : blendProfile->ProfileEntries)
-            {
-                if (boneCount > 0)
-                {
-                    dumpString += ",";
-                }
+			dumpString += ",BlendValues=(";
+			uint32 boneCount = 0;
+			for (auto& bone : blendProfile->ProfileEntries)
+			{
+				if (boneCount > 0)
+				{
+					dumpString += ",";
+				}
 
-                dumpString += "(\"";
-                dumpString += bone.BoneReference.BoneName.ToString();
-                dumpString += "\", ";
+				dumpString += "(\"";
+				dumpString += bone.BoneReference.BoneName.ToString();
+				dumpString += "\", ";
 
-                dumpString += FString::SanitizeFloat(bone.BlendScale);
-                dumpString += ")";
+				dumpString += FString::SanitizeFloat(bone.BlendScale);
+				dumpString += ")";
 
-                boneCount++;
-            }
+				boneCount++;
+			}
 
-            dumpString += ")";
-        }
+			dumpString += ")";
+		}
 
-        dumpString += "))";
+		dumpString += "))";
 
-        count++;
-    }
-    dumpString += ")";
+		count++;
+	}
+	dumpString += ")";
 
-    // print dump string to the output log
-    UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
+	// print dump string to the output log
+	UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
 
 #if WITH_EDITOR
-    FPlatformApplicationMisc::ClipboardCopy(*dumpString);
+	FPlatformApplicationMisc::ClipboardCopy(*dumpString);
 #endif
 
-    return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::AddSkeletonBlendProfile(USkeleton* Skeleton, const FName& BlendProfileName, const FTTBlendProfile_BP& BlendProfile, bool Overwrite)
 {
-    // check input arguments
-    if (!IsValid(Skeleton))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonBlendProfile\" with invalid \"Skeleton\"."));
-        return false;
-    }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonBlendProfile\" with invalid \"Skeleton\"."));
+		return false;
+	}
 
-    if (BlendProfileName.IsNone())
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonBlendProfile\" with invalid \"BlendProfileName\" (\"None\")."));
-        return false;
-    }
+	if (BlendProfileName.IsNone())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonBlendProfile\" with invalid \"BlendProfileName\" (\"None\")."));
+		return false;
+	}
 
-    // try to find a blend profile with the same name
-    auto blendProfile = Skeleton->GetBlendProfile(BlendProfileName);
-    if (blendProfile && !Overwrite)
-    { // if a blend profile was found and does not need to be overwriten, nothing is to do here
-        UE_LOG(LogTemp, Error, TEXT("The blend profile \"%s\" did already exist in Skeleton \"%s\" in case you want to overwrite the values set \"Overwrite\" to true."), *BlendProfileName.ToString());
-        return false;
-    }
+	// try to find a blend profile with the same name
+	auto blendProfile = Skeleton->GetBlendProfile(BlendProfileName);
+	if (blendProfile && !Overwrite)
+	{
+		// if a blend profile was found and does not need to be overwriten, nothing is to do here
+		UE_LOG(LogTemp, Error, TEXT("The blend profile \"%s\" did already exist in Skeleton \"%s\" in case you want to overwrite the values set \"Overwrite\" to true."), *BlendProfileName.ToString(), *Skeleton->GetName());
+		return false;
+	}
 
-    // in case a blend profile was not found and a not existing one needs to be overwriten,
-    // a new blend profile is created
-    if (!blendProfile)
-    {
-        blendProfile = Skeleton->CreateNewBlendProfile(BlendProfileName);
-    }
+	// in case a blend profile was not found and a not existing one needs to be overwriten,
+	// a new blend profile is created
+	if (!blendProfile)
+	{
+		blendProfile = Skeleton->CreateNewBlendProfile(BlendProfileName);
+	}
 
-    // fill out blend profile with it's values
-    blendProfile->Mode = BlendProfile.BlendProfileMode;
+	// fill out blend profile with it's values
+	blendProfile->Mode = BlendProfile.BlendProfileMode;
 
-    blendProfile->ProfileEntries.Empty(BlendProfile.BlendValues.Num());
-    for (auto& blendEntry : BlendProfile.BlendValues)
-    {
-        int32 boneIndex = Skeleton->GetReferenceSkeleton().FindBoneIndex(blendEntry.Key);
-        if (boneIndex == INDEX_NONE)
-        {
-            UE_LOG(LogTemp, Error, TEXT("The bone name \"%s\" did not exist in Skeleton \"%s\" while trying to add the blend profile \"%s\"."),
-                   *blendEntry.Key.ToString(), *Skeleton->GetPathName(), *BlendProfileName.ToString());
-            continue;
-        }
+	blendProfile->ProfileEntries.Empty(BlendProfile.BlendValues.Num());
+	for (auto& blendEntry : BlendProfile.BlendValues)
+	{
+		int32 boneIndex = Skeleton->GetReferenceSkeleton().FindBoneIndex(blendEntry.Key);
+		if (boneIndex == INDEX_NONE)
+		{
+			UE_LOG(LogTemp, Error, TEXT("The bone name \"%s\" did not exist in Skeleton \"%s\" while trying to add the blend profile \"%s\"."), *blendEntry.Key.ToString(), *Skeleton->GetPathName(), *BlendProfileName.ToString());
+			continue;
+		}
 
-        blendProfile->SetBoneBlendScale(blendEntry.Key, blendEntry.Value, false, true);
-    }
+		blendProfile->SetBoneBlendScale(blendEntry.Key, blendEntry.Value, false, true);
+	}
 
-    return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::AddSkeletonCurve(USkeleton* Skeleton, const FName& SkeletonCurveName)
 {
-    // check input arguments
-    if (!IsValid(Skeleton))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonCurve\" with invalid \"Skeleton\"."));
-        return false;
-    }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonCurve\" with invalid \"Skeleton\"."));
+		return false;
+	}
 
-    if (SkeletonCurveName.IsNone())
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonCurve\" with invalid \"SkeletonCurveName\" (\"None\")."));
-        return false;
-    }
-  
-  return Skeleton->AddCurveMetaData(SkeletonCurveName);
+	if (SkeletonCurveName.IsNone())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonCurve\" with invalid \"SkeletonCurveName\" (\"None\")."));
+		return false;
+	}
+
+	return Skeleton->AddCurveMetaData(SkeletonCurveName);
 }
 
 bool UTTToolboxBlueprintLibrary::AddSkeletonSlotGroup(USkeleton* Skeleton, const FTTMontageSlotGroup& SlotGroup)
 {
-    // check input arguments
-    if (!IsValid(Skeleton))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"DumpGroupsAndSlots\" with invalid \"Skeleton\"."));
-        return false;
-    }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpGroupsAndSlots\" with invalid \"Skeleton\"."));
+		return false;
+	}
 
-    if (SlotGroup.GroupName.IsNone())
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonSlotGroup\" with invalid \"SlotGroup.GroupName\" (\"None\")."));
-        return false;
-    }
+	if (SlotGroup.GroupName.IsNone())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddSkeletonSlotGroup\" with invalid \"SlotGroup.GroupName\" (\"None\")."));
+		return false;
+	}
 
-    auto slotGroup = Skeleton->FindAnimSlotGroup(SlotGroup.GroupName);
-    if (!slotGroup)
-    {
-        (void)Skeleton->AddSlotGroupName(SlotGroup.GroupName); // do not process the return value or raise any warning
-        slotGroup = Skeleton->FindAnimSlotGroup(SlotGroup.GroupName);
-    }
+	auto slotGroup = Skeleton->FindAnimSlotGroup(SlotGroup.GroupName);
+	if (!slotGroup)
+	{
+		(void)Skeleton->AddSlotGroupName(SlotGroup.GroupName); // do not process the return value or raise any warning
+		slotGroup = Skeleton->FindAnimSlotGroup(SlotGroup.GroupName);
+	}
 
-    for(int32 ii = 0; ii < SlotGroup.SlotNames.Num(); ii++)
-    {
-        if (SlotGroup.SlotNames[ii].IsNone())
-        {
-            UE_LOG(LogTemp, Error, TEXT("During the call of \"AddSkeletonSlotGroup\" the slot group \"%s\" did contain a invalid slot name (\"None\") at index %i."), *SlotGroup.GroupName.ToString(), ii);
-            continue;
-        }
+	for (int32 ii = 0; ii < SlotGroup.SlotNames.Num(); ii++)
+	{
+		if (SlotGroup.SlotNames[ii].IsNone())
+		{
+			UE_LOG(LogTemp, Error, TEXT("During the call of \"AddSkeletonSlotGroup\" the slot group \"%s\" did contain a invalid slot name (\"None\") at index %i."), *SlotGroup.GroupName.ToString(), ii);
+			continue;
+		}
 
-        slotGroup->SlotNames.AddUnique(SlotGroup.SlotNames[ii]);
-    }
+		slotGroup->SlotNames.AddUnique(SlotGroup.SlotNames[ii]);
+	}
 
-    Skeleton->Modify();
+	Skeleton->Modify();
 
-    return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::DumpGroupsAndSlots(USkeleton* Skeleton)
 {
-    // check input arguments
-    if (!IsValid(Skeleton))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"DumpGroupsAndSlots\" with invalid \"Skeleton\"."));
-        return false;
-    }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpGroupsAndSlots\" with invalid \"Skeleton\"."));
+		return false;
+	}
 
-    // convert blend profiles to a string
-    // ((GroupName="G",SlotNames=("S1","S2")))
-    FString dumpString = "(";
-    uint32 count = 0;
-    for (auto& group : Skeleton->GetSlotGroups())
-    {
-        if (count > 0)
-        {
-            dumpString += ",(";
-        }
-        else
-        {
-            dumpString += "(";
-        }
+	// convert blend profiles to a string
+	// ((GroupName="G",SlotNames=("S1","S2")))
+	FString dumpString = "(";
+	uint32 count = 0;
+	for (auto& group : Skeleton->GetSlotGroups())
+	{
+		if (count > 0)
+		{
+			dumpString += ",(";
+		}
+		else
+		{
+			dumpString += "(";
+		}
 
-        // name
-        dumpString += "GroupName=\"";
-        dumpString += group.GroupName.ToString();
-        dumpString += "\"";
+		// name
+		dumpString += "GroupName=\"";
+		dumpString += group.GroupName.ToString();
+		dumpString += "\"";
 
-        uint32 slotCount = 0;
-        if (group.SlotNames.Num() > 0)
-        {
-            dumpString += ",SlotNames=(";
-        }
-        for (auto& slot : group.SlotNames)
-        {
-            if (slotCount > 0)
-            {
-                dumpString += ",";
-            }
+		uint32 slotCount = 0;
+		if (group.SlotNames.Num() > 0)
+		{
+			dumpString += ",SlotNames=(";
+		}
+		for (auto& slot : group.SlotNames)
+		{
+			if (slotCount > 0)
+			{
+				dumpString += ",";
+			}
 
-            dumpString += "\"";
-            dumpString += slot.ToString();
-            dumpString += "\"";
+			dumpString += "\"";
+			dumpString += slot.ToString();
+			dumpString += "\"";
 
-            slotCount++;
-        }
+			slotCount++;
+		}
 
-        if (group.SlotNames.Num() > 0)
-        {
-            dumpString += ")";
-        }
+		if (group.SlotNames.Num() > 0)
+		{
+			dumpString += ")";
+		}
 
-        dumpString += ")";
+		dumpString += ")";
 
-        count++;
-    }
-    dumpString += ")";
+		count++;
+	}
+	dumpString += ")";
 
-    // print dump string to the output log
-    UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
+	// print dump string to the output log
+	UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
 
 #if WITH_EDITOR
-    FPlatformApplicationMisc::ClipboardCopy(*dumpString);
+	FPlatformApplicationMisc::ClipboardCopy(*dumpString);
 #endif
 
-    return true;
+	return true;
 }
 
 //! @todo @ffs check if the engine class could be used here
 struct CSkeletonReferencePose
 {
-  CSkeletonReferencePose(const FReferenceSkeleton& ReferenceSkeleton)
-    : m_referenceSkeleton(ReferenceSkeleton)
-  {
-    m_localSpacePoses.SetNumZeroed(m_referenceSkeleton.GetNum());
-    for (int32 ii = 0; ii < m_referenceSkeleton.GetNum(); ++ii)
-    {
-      m_localSpacePoses[ii] = m_referenceSkeleton.GetRefBonePose()[ii];
-    }
+	CSkeletonReferencePose(const FReferenceSkeleton& ReferenceSkeleton)
+		: m_referenceSkeleton(ReferenceSkeleton)
+	{
+		m_localSpacePoses.SetNumZeroed(m_referenceSkeleton.GetNum());
+		for (int32 ii = 0; ii < m_referenceSkeleton.GetNum(); ++ii)
+		{
+			m_localSpacePoses[ii] = m_referenceSkeleton.GetRefBonePose()[ii];
+		}
 
-    calculateWorldSpaceTransforms();
-  }
+		calculateWorldSpaceTransforms();
+	}
 
-  enum class EBonePoseSpaces : uint8
-  {
-    // Local (bone) space 
-    Local,
-    // World (component) space
-    World
-  };
+	enum class EBonePoseSpaces : uint8
+	{
+		// Local (bone) space 
+		Local,
+		// World (component) space
+		World
+	};
 
-  void SetBonePose(const FName& BoneName, const FTransform& Transform, EBonePoseSpaces Space = EBonePoseSpaces::Local)
-  {
-    int32 boneIndex = m_referenceSkeleton.FindBoneIndex(BoneName);
-    if (boneIndex == INDEX_NONE)
-    {
-      UE_LOG(LogTemp, Error, TEXT("The bone name \"%s\" is not present to calculate the local and world transforms. Please create an issue here https://github.com/tuatec/TTToolbox/issues."), *BoneName.ToString());
-      return;
-    }
+	void SetBonePose(const FName& BoneName, const FTransform& Transform, EBonePoseSpaces Space = EBonePoseSpaces::Local)
+	{
+		int32 boneIndex = m_referenceSkeleton.FindBoneIndex(BoneName);
+		if (boneIndex == INDEX_NONE)
+		{
+			UE_LOG(LogTemp, Error, TEXT("The bone name \"%s\" is not present to calculate the local and world transforms. Please create an issue here https://github.com/tuatec/TTToolbox/issues."), *BoneName.ToString());
+			return;
+		}
 
-    if (Space == EBonePoseSpaces::Local)
-    {
-      m_localSpacePoses[boneIndex] = Transform;
-    }
-    else
-    {
-      const int32 parentIndex = m_referenceSkeleton.GetParentIndex(boneIndex);
-      const FTransform ParentTransformWS = parentIndex != INDEX_NONE ? m_worldSpacePoses[parentIndex] : FTransform::Identity;
-      m_localSpacePoses[boneIndex] = Transform.GetRelativeTransform(ParentTransformWS);
-    }
+		if (Space == EBonePoseSpaces::Local)
+		{
+			m_localSpacePoses[boneIndex] = Transform;
+		}
+		else
+		{
+			const int32 parentIndex = m_referenceSkeleton.GetParentIndex(boneIndex);
+			const FTransform ParentTransformWS = parentIndex != INDEX_NONE ? m_worldSpacePoses[parentIndex] : FTransform::Identity;
+			m_localSpacePoses[boneIndex] = Transform.GetRelativeTransform(ParentTransformWS);
+		}
 
-    calculateWorldSpaceTransforms();
-  }
+		calculateWorldSpaceTransforms();
+	}
 
-  const FTransform& GetRefBonePose(const FName& BoneName, EBonePoseSpaces Space = EBonePoseSpaces::Local)
-  {
-    int32 boneIndex = m_referenceSkeleton.FindBoneIndex(BoneName);
-    if (boneIndex == INDEX_NONE)
-    {
-      return FTransform::Identity;
-    }
+	const FTransform& GetRefBonePose(const FName& BoneName, EBonePoseSpaces Space = EBonePoseSpaces::Local)
+	{
+		int32 boneIndex = m_referenceSkeleton.FindBoneIndex(BoneName);
+		if (boneIndex == INDEX_NONE)
+		{
+			return FTransform::Identity;
+		}
 
-    return Space == EBonePoseSpaces::Local ? m_localSpacePoses[boneIndex] : m_worldSpacePoses[boneIndex];
-  }
+		return Space == EBonePoseSpaces::Local ? m_localSpacePoses[boneIndex] : m_worldSpacePoses[boneIndex];
+	}
 
-private:
-  void calculateWorldSpaceTransforms()
-  {
-    TArray<bool> processed;
-    processed.SetNumZeroed(m_localSpacePoses.Num());
-    m_worldSpacePoses.SetNum(m_localSpacePoses.Num());
-    for (int32 ii = 0; ii < m_referenceSkeleton.GetNum(); ++ii)
-    {
-      const int32 ParentIndex = m_referenceSkeleton.GetParentIndex(ii);
-      if (ParentIndex != INDEX_NONE)
-      {
-        //ensure(Processed[ii]);
-        m_worldSpacePoses[ii] = m_localSpacePoses[ii] * m_worldSpacePoses[ParentIndex];
-      }
-      else
-      {
-        m_worldSpacePoses[ii] = m_localSpacePoses[ii];
-      }
+	private:
+		void calculateWorldSpaceTransforms()
+		{
+			TArray<bool> processed;
+			processed.SetNumZeroed(m_localSpacePoses.Num());
+			m_worldSpacePoses.SetNum(m_localSpacePoses.Num());
+			for (int32 ii = 0; ii < m_referenceSkeleton.GetNum(); ++ii)
+			{
+				const int32 ParentIndex = m_referenceSkeleton.GetParentIndex(ii);
+				if (ParentIndex != INDEX_NONE)
+				{
+					//ensure(Processed[ii]);
+					m_worldSpacePoses[ii] = m_localSpacePoses[ii] * m_worldSpacePoses[ParentIndex];
+				}
+				else
+				{
+					m_worldSpacePoses[ii] = m_localSpacePoses[ii];
+				}
 
-      processed[ii] = true;
-    }
-  }
+				processed[ii] = true;
+			}
+		}
 
-  const FReferenceSkeleton& m_referenceSkeleton;
-  TArray<FTransform> m_localSpacePoses;
+		const FReferenceSkeleton& m_referenceSkeleton;
+		TArray<FTransform> m_localSpacePoses;
 
-  TArray<FTransform> m_worldSpacePoses;
+		TArray<FTransform> m_worldSpacePoses;
 };
 
 bool UTTToolboxBlueprintLibrary::AddUnweightedBone(const TArray<FTTNewBone_BP>& NewBones, USkeleton* Skeleton)
 {
-  if(!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Invalid input. AddUnweightedBone was called with an invalid skeleton asset. Adding unweighted bones will be aborted."));
-    return false;
-  }
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid input. AddUnweightedBone was called with an invalid skeleton asset. Adding unweighted bones will be aborted."));
+		return false;
+	}
 
-  if (NewBones.Num() <= 0)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Invalid input. No new bones were given to AddUnweightedBone. Adding unweighted bones will be aborted."));
-    return false;
-  }
+	if (NewBones.Num() <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid input. No new bones were given to AddUnweightedBone. Adding unweighted bones will be aborted."));
+		return false;
+	}
 
-  bool errorsOccured = false;
-  bool foundParent = false;
-  for (auto& newBone : NewBones)
-  {
-    if (Skeleton->GetReferenceSkeleton().FindBoneIndex(newBone.NewBoneName) != INDEX_NONE)
-    {
-      UE_LOG(LogTemp, Error, TEXT("The unweighted bone \"%s\" already exists in the skeleton \"%s\"."), *newBone.NewBoneName.ToString(), *Skeleton->GetPathName());
-      errorsOccured = true;
-    }
+	bool errorsOccured = false;
+	bool foundParent = false;
+	for (auto& newBone : NewBones)
+	{
+		if (Skeleton->GetReferenceSkeleton().FindBoneIndex(newBone.NewBoneName) != INDEX_NONE)
+		{
+			UE_LOG(LogTemp, Error, TEXT("The unweighted bone \"%s\" already exists in the skeleton \"%s\"."), *newBone.NewBoneName.ToString(), *Skeleton->GetPathName());
+			errorsOccured = true;
+		}
 
-    if (Skeleton->GetReferenceSkeleton().FindBoneIndex(newBone.ParentBone) != INDEX_NONE)
-    {
-      foundParent = true;
-      UE_LOG(LogTemp, Display, TEXT("The following bone seems to be a parent bone \"%s\" for the new unweighted bone chain."), *newBone.ParentBone.ToString());
-    }
-    else
-    {
-      bool boneIsANewBone = false;
-      for (auto& boneToTest : NewBones)
-      {
-        if (newBone.ParentBone == boneToTest.NewBoneName)
-        {
-          boneIsANewBone = true;
-          break;
-        }
-      }
+		if (Skeleton->GetReferenceSkeleton().FindBoneIndex(newBone.ParentBone) != INDEX_NONE)
+		{
+			foundParent = true;
+			UE_LOG(LogTemp, Display, TEXT("The following bone seems to be a parent bone \"%s\" for the new unweighted bone chain."), *newBone.ParentBone.ToString());
+		}
+		else
+		{
+			bool boneIsANewBone = false;
+			for (auto& boneToTest : NewBones)
+			{
+				if (newBone.ParentBone == boneToTest.NewBoneName)
+				{
+					boneIsANewBone = true;
+					break;
+				}
+			}
 
-      if (!boneIsANewBone)
-      {
-        UE_LOG(LogTemp, Error, TEXT("ParentBone \"%s\" for child bone \"%s\" not found. Adding the unweighted bones is impossible as no correct parent bone setup exists."), *newBone.ParentBone.ToString(), *newBone.NewBoneName.ToString());
-        errorsOccured = true;
-      }
-    }
-  }
+			if (!boneIsANewBone)
+			{
+				UE_LOG(LogTemp, Error, TEXT("ParentBone \"%s\" for child bone \"%s\" not found. Adding the unweighted bones is impossible as no correct parent bone setup exists."), *newBone.ParentBone.ToString(), *newBone.NewBoneName.ToString());
+				errorsOccured = true;
+			}
+		}
+	}
 
-  if (!foundParent)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Invalid input. No parent bone found for the new unweighted bones. Please check you configuration. Adding unweighted bones will be aborted."));
-    return false;
-  }
+	if (!foundParent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid input. No parent bone found for the new unweighted bones. Please check you configuration. Adding unweighted bones will be aborted."));
+		return false;
+	}
 
-  if (errorsOccured)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Invalid input. At least one error occured, for details see the error message(s) above. Adding unweighted bones will be aborted."));
-    return false;
-  }
+	if (errorsOccured)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid input. At least one error occured, for details see the error message(s) above. Adding unweighted bones will be aborted."));
+		return false;
+	}
 
-  TArray<USkeletalMesh*> skeletalMeshes = getAllSkeletalMeshes(Skeleton);
-  if (skeletalMeshes.IsEmpty())
-  {
-    UE_LOG(LogTemp, Error, TEXT("Aborting adding unweighted bones as no skeletal meshes found that are connected to \"%s\""), *Skeleton->GetPathName());
-    return false;
-  }
+	TArray<USkeletalMesh*> skeletalMeshes = getAllSkeletalMeshes(Skeleton);
+	if (skeletalMeshes.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Aborting adding unweighted bones as no skeletal meshes found that are connected to \"%s\""), *Skeleton->GetPathName());
+		return false;
+	}
 
-  // Sadly, the implementation does have some issues with wrong bone indices, 
-  // see https://github.com/tuatec/TTToolbox/issues/5#issuecomment-1184052765 for the details.
-  // That's why all virtual bones get removed (same state if a skeletal mesh is imported through an fbx file)
-  // and later added again. This step needs to be done anyways as the bone tree needs to be regenerated, 
-  // sadly again there is no public API that can trigger this. BUT! It is possible to trigger the regeneration process
-  // through adding a virtual bone.
-  // Long story short, adding virtual bones makes it possible to introduce unweighted bones in a save way. ;-)
-  const auto savedVirtualBones = Skeleton->GetVirtualBones();
-  {
-    TArray<FName> virtualBoneNamesToDelete;
-    for (auto& virtualBone : savedVirtualBones) {
-      virtualBoneNamesToDelete.Add(virtualBone.VirtualBoneName);
-    }
-    if (virtualBoneNamesToDelete.Num() > 0) {
-      Skeleton->RemoveVirtualBones(virtualBoneNamesToDelete);
-    }
-  }
+	// Sadly, the implementation does have some issues with wrong bone indices, 
+	// see https://github.com/tuatec/TTToolbox/issues/5#issuecomment-1184052765 for the details.
+	// That's why all virtual bones get removed (same state if a skeletal mesh is imported through an fbx file)
+	// and later added again. This step needs to be done anyways as the bone tree needs to be regenerated, 
+	// sadly again there is no public API that can trigger this. BUT! It is possible to trigger the regeneration process
+	// through adding a virtual bone.
+	// Long story short, adding virtual bones makes it possible to introduce unweighted bones in a save way. ;-)
+	const auto savedVirtualBones = Skeleton->GetVirtualBones();
+	{
+		TArray<FName> virtualBoneNamesToDelete;
+		for (auto& virtualBone : savedVirtualBones)
+		{
+			virtualBoneNamesToDelete.Add(virtualBone.VirtualBoneName);
+		}
+		if (virtualBoneNamesToDelete.Num() > 0)
+		{
+			Skeleton->RemoveVirtualBones(virtualBoneNamesToDelete);
+		}
+	}
 
-  uint32 modifiedSkeletalMeshes = 0;
-  //! @todo @ffs release renderer ressources
-  //! It seems to be that the renderer does not need to be flushed.
-  //! Still wondering a lot why it creates assertions. Mabye a future version of Unreal needs it
-  //for (auto skeletalMesh : skeletalMeshes)
-  //{
-  //  skeletalMesh->FlushRenderState();
-  //}
+	uint32 modifiedSkeletalMeshes = 0;
+	//! @todo @ffs release renderer ressources
+	//! It seems to be that the renderer does not need to be flushed.
+	//! Still wondering a lot why it creates assertions. Mabye a future version of Unreal needs it
+	//for (auto skeletalMesh : skeletalMeshes)
+	//{
+	//  skeletalMesh->FlushRenderState();
+	//}
 
-  for (auto skeletalMesh : skeletalMeshes)
-  {
-    if (Skeleton == skeletalMesh->GetSkeleton())
-    {
-      //! @todo @ffs release renderer ressources
-      //skeletalMesh->FlushRenderState();
-      //skeletalMesh->ReleaseResources();
-      //skeletalMesh->ReleaseResourcesFence.Wait();
-  
-      for (auto& newBone : NewBones)
-      {
-        { // add bones to the reference skeleton of the skeletal mesh
-          int32 parentBoneIndex = INDEX_NONE;
-          FMeshBoneInfo meshParentBoneInfo;
-          for (int32 ii = 0; ii < skeletalMesh->GetRefSkeleton().GetRawBoneNum(); ii++)
-          {
-            const FMeshBoneInfo meshBoneInfo = skeletalMesh->GetRefSkeleton().GetRawRefBoneInfo()[ii];
-            if (meshBoneInfo.Name == newBone.ParentBone)
-            {
-              meshParentBoneInfo = meshBoneInfo;
-              parentBoneIndex = ii;
-              break;
-            }
-          }
-  
-          if (parentBoneIndex == INDEX_NONE)
-          {
-            UE_LOG(LogTemp, Error, TEXT("parent bone \"%s\" of the new bone \"%s\" not found in reference skeleton skipping..."), *newBone.ParentBone.ToString(), *newBone.NewBoneName.ToString());
-            continue;
-          }
-  
-          FReferenceSkeletonModifier referenceSkeletonModifier(skeletalMesh->GetRefSkeleton(), Skeleton);
-          const FMeshBoneInfo newFMeshBoneInfo(newBone.NewBoneName, newBone.NewBoneName.ToString(), parentBoneIndex);
-          referenceSkeletonModifier.Add(newFMeshBoneInfo, FTransform::Identity);
-        }
-  
-        int32 LODIdx = 0;
-        for (FSkeletalMeshLODModel& skeletalMeshLODModel : skeletalMesh->GetImportedModel()->LODModels)
-        {
-          int32 parentBoneIndex = skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.ParentBone);
-          if (parentBoneIndex == INDEX_NONE)
-          {
-            UE_LOG(LogTemp, Warning, TEXT("During LOD adaption the parent bone \"%s\" was not present in the skeletal mesh \"%s\""),
-              *newBone.ParentBone.ToString(), *skeletalMesh->GetPathName());
-            continue;
-          }
+	for (auto skeletalMesh : skeletalMeshes)
+	{
+		if (Skeleton == skeletalMesh->GetSkeleton())
+		{
+			//! @todo @ffs release renderer ressources
+			//skeletalMesh->FlushRenderState();
+			//skeletalMesh->ReleaseResources();
+			//skeletalMesh->ReleaseResourcesFence.Wait();
 
-          int32 newBoneIndex = skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.NewBoneName);
-          if (newBoneIndex == INDEX_NONE)
-          {
-            UE_LOG(LogTemp, Warning, TEXT("During LOD adaption the new bone \"%s\" was not present in the skeletal mesh \"%s\""),
-              *newBone.NewBoneName.ToString(), *skeletalMesh->GetPathName());
-            continue;
-          }
-        
-          skeletalMeshLODModel.RequiredBones.Add(newBoneIndex);
-        
-          if (skeletalMesh->IsLODImportedDataBuildAvailable(LODIdx) && !skeletalMesh->IsLODImportedDataEmpty(LODIdx))
-          {
-            FSkeletalMeshImportData skeletalMeshImportData;
-            skeletalMesh->LoadLODImportedData(LODIdx, skeletalMeshImportData);
-        
-            skeletalMeshImportData.RefBonesBinary[parentBoneIndex].NumChildren++;
-            const SkeletalMeshImportData::FJointPos NewRootPos = { FTransform3f::Identity, 1.f, 100.f, 100.f, 100.f };
-            const SkeletalMeshImportData::FBone bone = { newBone.NewBoneName.ToString(), 0, /*NumChildren*/0, parentBoneIndex, NewRootPos };
-            skeletalMeshImportData.RefBonesBinary.Add(bone);
-        
-            skeletalMesh->SaveLODImportedData(LODIdx, skeletalMeshImportData);
-          }
-          else
-          {
-            for (auto& skelMeshSection : skeletalMeshLODModel.Sections)
-            {
-              skelMeshSection.BoneMap.Add(newBoneIndex);
-            }
-          }
-        }
-      }
-  
-      //! @todo @ffs release renderer ressources
-      //skeletalMesh->PostEditChange();
-      //skeletalMesh->InitResources();
-  
-      // the mesh got new bones and now it is necessary to merge those bones into the USkeleton asset as well
-      if (!(Skeleton->MergeAllBonesToBoneTree(skeletalMesh)))
-      {
-        UE_LOG(LogTemp, Error, TEXT("The final step of merging all bones for the skeletal mesh \"%s\"into the bone failed. Please create an issue here https://github.com/tuatec/TTToolbox/issues."), *(skeletalMesh->GetPathName()));
-      }
-  
-      for (auto& newBone : NewBones)
-      {
-        // constraint bone within the reference pose
-        int32 constrainBoneIndex = skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.ConstraintBone);
-        if (constrainBoneIndex == INDEX_NONE)
-        {
-          UE_LOG(LogTemp, Warning, TEXT("constraint bone \"%s\" was not found in the reference skeleton of skeleton asset \"%s\" applying identity transform."), *newBone.ConstraintBone.ToString(), *(Skeleton->GetPathName()));
-        }
-        else if (constrainBoneIndex >= skeletalMesh->GetRefSkeleton().GetRefBonePose().Num())
-        {
-          UE_LOG(LogTemp, Warning, TEXT("constraint bone \"%s\" index is not valid."), *newBone.ConstraintBone.ToString());
-        }
-        else
-        {
-          CSkeletonReferencePose skeletonReferencePose(skeletalMesh->GetRefSkeleton());
-          const FTransform worldTransform = skeletonReferencePose.GetRefBonePose(newBone.ConstraintBone, CSkeletonReferencePose::EBonePoseSpaces::World);
-          skeletonReferencePose.SetBonePose(newBone.NewBoneName, worldTransform, CSkeletonReferencePose::EBonePoseSpaces::World);
-          const FTransform newBoneTransform = skeletonReferencePose.GetRefBonePose(newBone.NewBoneName);
-  
-          FReferenceSkeletonModifier referenceSkeletonModifier(skeletalMesh->GetRefSkeleton(), Skeleton);
-          referenceSkeletonModifier.UpdateRefPoseTransform(skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.NewBoneName), newBoneTransform);
-        }
-      }
+			for (auto& newBone : NewBones)
+			{
+				{
+					// add bones to the reference skeleton of the skeletal mesh
+					int32 parentBoneIndex = INDEX_NONE;
+					FMeshBoneInfo meshParentBoneInfo;
+					for (int32 ii = 0; ii < skeletalMesh->GetRefSkeleton().GetRawBoneNum(); ii++)
+					{
+						const FMeshBoneInfo meshBoneInfo = skeletalMesh->GetRefSkeleton().GetRawRefBoneInfo()[ii];
+						if (meshBoneInfo.Name == newBone.ParentBone)
+						{
+							meshParentBoneInfo = meshBoneInfo;
+							parentBoneIndex = ii;
+							break;
+						}
+					}
 
-      // through caching reasons the USkeleton has internally a mapping table between skeletal meshes and the skeleton,
-      // as new bones were added this table is not valid anymore ==> force rebuilding of that table!
-      // Sadly none of these methods is exposed for plugin developers :(
-      // - USkeleton::HandleVirtualBoneChanges
-      // - USkeleton::RebuildLinkup
-      // - USkeleton::RemoveLinkup
-      //
-      // But happily adding and removing virtual bones call internall USkeleton::HandleVirtualBoneChanges,
-      // which should rebuild the mapping table ;-)
-      FName virtualBoneName = *(NewBones[0].ParentBone.ToString() + "_delete_me");
-      if (!Skeleton->AddNewVirtualBone(NewBones[0].ParentBone, NewBones[0].ParentBone, virtualBoneName))
-      {
-        UE_LOG(LogTemp, Error, TEXT("failed to add dirty virtual bone hack to force the rebuild of the bone mapping table of skeleton <todo-name>"));
-      }
-      Skeleton->RemoveVirtualBones({ virtualBoneName });
-      
-      skeletalMesh->PostEditChange();
-      //skeletalMesh->InitResources();
-      skeletalMesh->Modify();
-      modifiedSkeletalMeshes++;
-    }
-  }
+					if (parentBoneIndex == INDEX_NONE)
+					{
+						UE_LOG(LogTemp, Error, TEXT("parent bone \"%s\" of the new bone \"%s\" not found in reference skeleton skipping..."), *newBone.ParentBone.ToString(), *newBone.NewBoneName.ToString());
+						continue;
+					}
 
-  // finally readd the virtual bones again to savely store everything
-  if (savedVirtualBones.Num() > 0)
-  {
-    for (auto& virtualBone : savedVirtualBones)
-    {
-      if (!UTTToolboxBlueprintLibrary::AddVirtualBone(virtualBone.VirtualBoneName, virtualBone.SourceBoneName, virtualBone.TargetBoneName, Skeleton))
-      {
-        UE_LOG(LogTemp, Error, TEXT("Internal error! Failed to add virtual bone \"%s\" again please raise a issue here: https://github.com/tuatec/TTToolbox/issues."), *virtualBone.VirtualBoneName.ToString());
-      }
-    }
-  }
+					FReferenceSkeletonModifier referenceSkeletonModifier(skeletalMesh->GetRefSkeleton(), Skeleton);
+					const FMeshBoneInfo newFMeshBoneInfo(newBone.NewBoneName, newBone.NewBoneName.ToString(), parentBoneIndex);
+					referenceSkeletonModifier.Add(newFMeshBoneInfo, FTransform::Identity);
+				}
 
-  if (modifiedSkeletalMeshes > 0)
-  {
-    Skeleton->Modify();
-  }
+				int32 LODIdx = 0;
+				for (FSkeletalMeshLODModel& skeletalMeshLODModel : skeletalMesh->GetImportedModel()->LODModels)
+				{
+					int32 parentBoneIndex = skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.ParentBone);
+					if (parentBoneIndex == INDEX_NONE)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("During LOD adaption the parent bone \"%s\" was not present in the skeletal mesh \"%s\""), *newBone.ParentBone.ToString(), *skeletalMesh->GetPathName());
+						continue;
+					}
 
-  return true;
+					int32 newBoneIndex = skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.NewBoneName);
+					if (newBoneIndex == INDEX_NONE)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("During LOD adaption the new bone \"%s\" was not present in the skeletal mesh \"%s\""), *newBone.NewBoneName.ToString(), *skeletalMesh->GetPathName());
+						continue;
+					}
+
+					skeletalMeshLODModel.RequiredBones.Add(newBoneIndex);
+
+					if (skeletalMesh->HasMeshDescription(LODIdx))
+					{
+						FSkeletalMeshImportData skeletalMeshImportData = FSkeletalMeshImportData::CreateFromMeshDescription(*skeletalMesh->GetMeshDescription(LODIdx));
+
+						skeletalMeshImportData.RefBonesBinary[parentBoneIndex].NumChildren++;
+						const SkeletalMeshImportData::FJointPos NewRootPos = {FTransform3f::Identity, 1.f, 100.f, 100.f, 100.f};
+						const SkeletalMeshImportData::FBone bone = {newBone.NewBoneName.ToString(), 0, /*NumChildren*/0, parentBoneIndex, NewRootPos};
+						skeletalMeshImportData.RefBonesBinary.Add(bone);
+
+						FMeshDescription Desc;
+						skeletalMeshImportData.GetMeshDescription(nullptr, &skeletalMesh->GetLODInfo(LODIdx)->BuildSettings, Desc);
+						skeletalMesh->CreateMeshDescription(LODIdx, MoveTemp(Desc));
+						skeletalMesh->CommitMeshDescription(LODIdx);
+					}
+					else
+					{
+						for (auto& skelMeshSection : skeletalMeshLODModel.Sections)
+						{
+							skelMeshSection.BoneMap.Add(newBoneIndex);
+						}
+					}
+				}
+			}
+
+			//! @todo @ffs release renderer ressources
+			//skeletalMesh->PostEditChange();
+			//skeletalMesh->InitResources();
+
+			// the mesh got new bones and now it is necessary to merge those bones into the USkeleton asset as well
+			if (!(Skeleton->MergeAllBonesToBoneTree(skeletalMesh)))
+			{
+				UE_LOG(LogTemp, Error, TEXT("The final step of merging all bones for the skeletal mesh \"%s\"into the bone failed. Please create an issue here https://github.com/tuatec/TTToolbox/issues."), *(skeletalMesh->GetPathName()));
+			}
+
+			for (auto& newBone : NewBones)
+			{
+				// constraint bone within the reference pose
+				int32 constrainBoneIndex = skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.ConstraintBone);
+				if (constrainBoneIndex == INDEX_NONE)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("constraint bone \"%s\" was not found in the reference skeleton of skeleton asset \"%s\" applying identity transform."), *newBone.ConstraintBone.ToString(), *(Skeleton->GetPathName()));
+				}
+				else if (constrainBoneIndex >= skeletalMesh->GetRefSkeleton().GetRefBonePose().Num())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("constraint bone \"%s\" index is not valid."), *newBone.ConstraintBone.ToString());
+				}
+				else
+				{
+					CSkeletonReferencePose skeletonReferencePose(skeletalMesh->GetRefSkeleton());
+					const FTransform worldTransform = skeletonReferencePose.GetRefBonePose(newBone.ConstraintBone, CSkeletonReferencePose::EBonePoseSpaces::World);
+					skeletonReferencePose.SetBonePose(newBone.NewBoneName, worldTransform, CSkeletonReferencePose::EBonePoseSpaces::World);
+					const FTransform newBoneTransform = skeletonReferencePose.GetRefBonePose(newBone.NewBoneName);
+
+					FReferenceSkeletonModifier referenceSkeletonModifier(skeletalMesh->GetRefSkeleton(), Skeleton);
+					referenceSkeletonModifier.UpdateRefPoseTransform(skeletalMesh->GetRefSkeleton().FindBoneIndex(newBone.NewBoneName), newBoneTransform);
+				}
+			}
+
+			// through caching reasons the USkeleton has internally a mapping table between skeletal meshes and the skeleton,
+			// as new bones were added this table is not valid anymore ==> force rebuilding of that table!
+			// Sadly none of these methods is exposed for plugin developers :(
+			// - USkeleton::HandleVirtualBoneChanges
+			// - USkeleton::RebuildLinkup
+			// - USkeleton::RemoveLinkup
+			//
+			// But happily adding and removing virtual bones call internall USkeleton::HandleVirtualBoneChanges,
+			// which should rebuild the mapping table ;-)
+			FName virtualBoneName = *(NewBones[0].ParentBone.ToString() + "_delete_me");
+			if (!Skeleton->AddNewVirtualBone(NewBones[0].ParentBone, NewBones[0].ParentBone, virtualBoneName))
+			{
+				UE_LOG(LogTemp, Error, TEXT("failed to add dirty virtual bone hack to force the rebuild of the bone mapping table of skeleton <todo-name>"));
+			}
+			Skeleton->RemoveVirtualBones({virtualBoneName});
+
+			skeletalMesh->PostEditChange();
+			//skeletalMesh->InitResources();
+			skeletalMesh->Modify();
+			modifiedSkeletalMeshes++;
+		}
+	}
+
+	// finally readd the virtual bones again to savely store everything
+	if (savedVirtualBones.Num() > 0)
+	{
+		for (auto& virtualBone : savedVirtualBones)
+		{
+			if (!UTTToolboxBlueprintLibrary::AddVirtualBone(virtualBone.VirtualBoneName, virtualBone.SourceBoneName, virtualBone.TargetBoneName, Skeleton))
+			{
+				UE_LOG(LogTemp, Error, TEXT("Internal error! Failed to add virtual bone \"%s\" again please raise a issue here: https://github.com/tuatec/TTToolbox/issues."), *virtualBone.VirtualBoneName.ToString());
+			}
+		}
+	}
+
+	if (modifiedSkeletalMeshes > 0)
+	{
+		Skeleton->Modify();
+	}
+
+	return true;
 }
 
 void UTTToolboxBlueprintLibrary::RequestAnimationRecompress(USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"RequestAnimationRecompress\" with invalid skeleton."));
-    return;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"RequestAnimationRecompress\" with invalid skeleton."));
+		return;
+	}
 
-  TArray<FAssetData> assets;
-  IAssetRegistry& assetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-  assetRegistry.GetAssetsByClass(UAnimSequence::StaticClass()->GetFName(), assets);
+	TArray<FAssetData> assets;
+	IAssetRegistry& assetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	assetRegistry.GetAssetsByClass(UAnimSequence::StaticClass()->GetClassPathName(), assets);
 
-  for (auto& asset : assets)
-  {
-    if (auto animSequence = Cast<UAnimSequence>(asset.GetAsset()))
-    {
-      if (animSequence->GetSkeleton()->GetFName() == Skeleton->GetFName())
-      {
-        animSequence->BeginCacheDerivedDataForCurrentPlatform();
-      }
-    }
-  }
+	for (auto& asset : assets)
+	{
+		if (auto animSequence = Cast<UAnimSequence>(asset.GetAsset()))
+		{
+			if (animSequence->GetSkeleton()->GetFName() == Skeleton->GetFName())
+			{
+				animSequence->BeginCacheDerivedDataForCurrentPlatform();
+			}
+		}
+	}
 }
 
 void UTTToolboxBlueprintLibrary::RequestAnimSequencesRecompression(TArray<UAnimSequence*> AnimSequences)
 {
-  for (auto animSequence : AnimSequences)
-  {
-    if (!IsValid(animSequence))
-    {
-      //! @todo error message
-    }
-    else
-    {
-      animSequence->BeginCacheDerivedDataForCurrentPlatform();
-    }
-  }
+	for (auto animSequence : AnimSequences)
+	{
+		if (!IsValid(animSequence))
+		{
+			//! @todo error message
+		}
+		else
+		{
+			animSequence->BeginCacheDerivedDataForCurrentPlatform();
+		}
+	}
 }
 
 // the reason why we not call the official function "UAnimationBlueprintLibrary::SetAnimationInterpolationType"
@@ -1141,489 +1157,492 @@ void UTTToolboxBlueprintLibrary::RequestAnimSequencesRecompression(TArray<UAnimS
 // Also investing these ~10 lines of code will result in a better UX in the end. ;-)
 bool UTTToolboxBlueprintLibrary::SetAnimSequenceInterpolation(UAnimSequence* AnimSequence, EAnimInterpolationType AnimInterpolationType)
 {
-  // check input arguments
-  if (!IsValid(AnimSequence))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"SetAnimSequenceInterpolation\" with invalid AnimSequence."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(AnimSequence))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"SetAnimSequenceInterpolation\" with invalid AnimSequence."));
+		return false;
+	}
 
-  AnimSequence->Interpolation = AnimInterpolationType;
-  AnimSequence->Modify();
+	AnimSequence->Interpolation = AnimInterpolationType;
+	AnimSequence->Modify();
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::ConstraintBonesForSkeletonPose(const TArray<FTTConstraintBone_BP>& ConstraintBones, USkeleton* Skeleton)
 {
-  //! @todo @ffs implement
-  return false;
+	//! @todo @ffs implement
+	return false;
 }
 
 bool UTTToolboxBlueprintLibrary::AddRootBone(USkeleton* Skeleton)
 {
-  // check input arguments
-  if (!IsValid(Skeleton))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"AddRootBone\" with invalid Skeleton."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(Skeleton))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddRootBone\" with invalid Skeleton."));
+		return false;
+	}
 
-  // check if root bone already exists
-  if (Skeleton->GetReferenceSkeleton().FindBoneIndex("root") != INDEX_NONE)
-  {
-    UE_LOG(LogTemp, Error, TEXT("root bone already exists in \"%s\""), *(Skeleton->GetPathName()));
-    return false;
-  }
+	// check if root bone already exists
+	if (Skeleton->GetReferenceSkeleton().FindBoneIndex("root") != INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Error, TEXT("root bone already exists in \"%s\""), *(Skeleton->GetPathName()));
+		return false;
+	}
 
-  // adapt all meshes to register the new root bone
-  TArray<USkeletalMesh*> skeletalMeshes = getAllSkeletalMeshes(Skeleton);
-  if (skeletalMeshes.IsEmpty())
-  {
-    UE_LOG(LogTemp, Error, TEXT("During the call of \"AddRootBone\" no skeletal meshes found that are connected to the skeleton \"s\""), *(Skeleton->GetPathName()));
-    return false;
-  }
+	// adapt all meshes to register the new root bone
+	TArray<USkeletalMesh*> skeletalMeshes = getAllSkeletalMeshes(Skeleton);
+	if (skeletalMeshes.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("During the call of \"AddRootBone\" no skeletal meshes found that are connected to the skeleton \"s\""), *(Skeleton->GetPathName()));
+		return false;
+	}
 
-  // Sadly, the implementation does have some issues with wrong bone indices, 
-  // see https://github.com/tuatec/TTToolbox/issues/5#issuecomment-1184052765 for the details.
-  // That's why all virtual bones get removed (same state if a skeletal mesh is imported through an fbx file)
-  // and later added again. This step needs to be done anyways as the bone tree needs to be regenerated, 
-  // sadly again there is no public API that can trigger this. BUT! It is possible to trigger the regeneration process
-  // through adding a virtual bone.
-  // Long story short, adding virtual bones makes it possible to introduce unweighted bones in a save way. ;-)
-  const auto savedVirtualBones = Skeleton->GetVirtualBones();
-  {
-    TArray<FName> virtualBoneNamesToDelete;
-    for (auto& virtualBone : savedVirtualBones) {
-      virtualBoneNamesToDelete.Add(virtualBone.VirtualBoneName);
-    }
-    if (virtualBoneNamesToDelete.Num() > 0) {
-      Skeleton->RemoveVirtualBones(virtualBoneNamesToDelete);
-    }
-  }
+	// Sadly, the implementation does have some issues with wrong bone indices, 
+	// see https://github.com/tuatec/TTToolbox/issues/5#issuecomment-1184052765 for the details.
+	// That's why all virtual bones get removed (same state if a skeletal mesh is imported through an fbx file)
+	// and later added again. This step needs to be done anyways as the bone tree needs to be regenerated, 
+	// sadly again there is no public API that can trigger this. BUT! It is possible to trigger the regeneration process
+	// through adding a virtual bone.
+	// Long story short, adding virtual bones makes it possible to introduce unweighted bones in a save way. ;-)
+	const auto savedVirtualBones = Skeleton->GetVirtualBones();
+	{
+		TArray<FName> virtualBoneNamesToDelete;
+		for (auto& virtualBone : savedVirtualBones)
+		{
+			virtualBoneNamesToDelete.Add(virtualBone.VirtualBoneName);
+		}
+		if (virtualBoneNamesToDelete.Num() > 0)
+		{
+			Skeleton->RemoveVirtualBones(virtualBoneNamesToDelete);
+		}
+	}
 
-  uint32 modifiedSkeletalMeshes = 0;
-  for (auto skeletalMesh : skeletalMeshes)
-  {
-    if (Skeleton == skeletalMesh->GetSkeleton())
-    {
-      { // add root bone
-        FReferenceSkeleton referenceSkeleton;
-        {
-          FReferenceSkeletonModifier referenceSkeletonModifier(referenceSkeleton, skeletalMesh->GetSkeleton());
+	uint32 modifiedSkeletalMeshes = 0;
+	for (auto skeletalMesh : skeletalMeshes)
+	{
+		if (Skeleton == skeletalMesh->GetSkeleton())
+		{
+			{
+				// add root bone
+				FReferenceSkeleton referenceSkeleton;
+				{
+					FReferenceSkeletonModifier referenceSkeletonModifier(referenceSkeleton, skeletalMesh->GetSkeleton());
 
-          const FMeshBoneInfo meshRootBoneInfo(gs_rootBoneName, gs_rootBoneName.ToString(), INDEX_NONE);
-          referenceSkeletonModifier.Add(meshRootBoneInfo, FTransform::Identity);
+					const FMeshBoneInfo meshRootBoneInfo(gs_rootBoneName, gs_rootBoneName.ToString(), INDEX_NONE);
+					referenceSkeletonModifier.Add(meshRootBoneInfo, FTransform::Identity);
 
-          // increase parent bone indices to sucessfully register the root bone
-          for (int32 ii = 0; ii < skeletalMesh->GetSkeleton()->GetReferenceSkeleton().GetRawBoneNum(); ii++)
-          {
-            FMeshBoneInfo meshBoneInfo = skeletalMesh->GetSkeleton()->GetReferenceSkeleton().GetRawRefBoneInfo()[ii];
-            meshBoneInfo.ParentIndex++;
-            const auto boneRefPoseTransform = skeletalMesh->GetSkeleton()->GetReferenceSkeleton().GetRawRefBonePose()[ii];
-            referenceSkeletonModifier.Add(meshBoneInfo, boneRefPoseTransform);
-          }
-        }
+					// increase parent bone indices to sucessfully register the root bone
+					for (int32 ii = 0; ii < skeletalMesh->GetSkeleton()->GetReferenceSkeleton().GetRawBoneNum(); ii++)
+					{
+						FMeshBoneInfo meshBoneInfo = skeletalMesh->GetSkeleton()->GetReferenceSkeleton().GetRawRefBoneInfo()[ii];
+						meshBoneInfo.ParentIndex++;
+						const auto boneRefPoseTransform = skeletalMesh->GetSkeleton()->GetReferenceSkeleton().GetRawRefBonePose()[ii];
+						referenceSkeletonModifier.Add(meshBoneInfo, boneRefPoseTransform);
+					}
+				}
 
-        skeletalMesh->SetRefSkeleton(referenceSkeleton);
-      }
+				skeletalMesh->SetRefSkeleton(referenceSkeleton);
+			}
 
-      // reset all bone transforms and reset retarget pose
-      skeletalMesh->GetRetargetBasePose().Empty();
-      skeletalMesh->CalculateInvRefMatrices();
+			// reset all bone transforms and reset retarget pose
+			skeletalMesh->CalculateInvRefMatrices();
 
-      uint32 LODIndex = 0;
-      for (FSkeletalMeshLODModel& skeletalMeshLODModel : skeletalMesh->GetImportedModel()->LODModels)
-      {
-        // increase active bone indices to sucessfully register the new root bone
-        for (auto& activeBoneIndex : skeletalMeshLODModel.ActiveBoneIndices)
-        {
-          activeBoneIndex++;
-        }
-        // insert root bone
-        skeletalMeshLODModel.ActiveBoneIndices.Insert(0, 0);
+			uint32 LODIndex = 0;
+			for (FSkeletalMeshLODModel& skeletalMeshLODModel : skeletalMesh->GetImportedModel()->LODModels)
+			{
+				// increase active bone indices to sucessfully register the new root bone
+				for (auto& activeBoneIndex : skeletalMeshLODModel.ActiveBoneIndices)
+				{
+					activeBoneIndex++;
+				}
+				// insert root bone
+				skeletalMeshLODModel.ActiveBoneIndices.Insert(0, 0);
 
-        // increase required bone (unweighted bones) indices to sucessfully register the new root bone
-        for (auto& requiredBoneIndex : skeletalMeshLODModel.RequiredBones)
-        {
-          requiredBoneIndex++;
-        }
-        // insert root bone
-        skeletalMeshLODModel.RequiredBones.Insert(0, 0);
+				// increase required bone (unweighted bones) indices to sucessfully register the new root bone
+				for (auto& requiredBoneIndex : skeletalMeshLODModel.RequiredBones)
+				{
+					requiredBoneIndex++;
+				}
+				// insert root bone
+				skeletalMeshLODModel.RequiredBones.Insert(0, 0);
 
-        // update bone references used by the skin weights
-        for (auto& skinWeightsProfile : skeletalMeshLODModel.SkinWeightProfiles)
-        {
-          FImportedSkinWeightProfileData& importedSkinWeightProfileData = skeletalMeshLODModel.SkinWeightProfiles.FindChecked(skinWeightsProfile.Key);
+				// update bone references used by the skin weights
+				for (auto& skinWeightsProfile : skeletalMeshLODModel.SkinWeightProfiles)
+				{
+					FImportedSkinWeightProfileData& importedSkinWeightProfileData = skeletalMeshLODModel.SkinWeightProfiles.FindChecked(skinWeightsProfile.Key);
 
-          // increase bone skin weight indices to sucessfully register the root bone
-          for (auto& skinWeight : importedSkinWeightProfileData.SkinWeights)
-          {
-            for (int32 ii = 0; ii < MAX_TOTAL_INFLUENCES; ii++)
-            {
-              if (skinWeight.InfluenceWeights[ii] > 0)
-              {
-                skinWeight.InfluenceBones[ii]++;
-              }
-            }
-          }
+					// increase bone skin weight indices to sucessfully register the root bone
+					for (auto& skinWeight : importedSkinWeightProfileData.SkinWeights)
+					{
+						for (int32 ii = 0; ii < MAX_TOTAL_INFLUENCES; ii++)
+						{
+							if (skinWeight.InfluenceWeights[ii] > 0)
+							{
+								skinWeight.InfluenceBones[ii]++;
+							}
+						}
+					}
 
-          // increase source model influence bone indices to sucessfully register the root bone
-          for (auto& sourceModelInfluence : importedSkinWeightProfileData.SourceModelInfluences)
-          {
-            if (sourceModelInfluence.Weight > 0)
-            {
-              sourceModelInfluence.BoneIndex++;
-            }
-          }
-        }
+					// increase source model influence bone indices to sucessfully register the root bone
+					for (auto& sourceModelInfluence : importedSkinWeightProfileData.SourceModelInfluences)
+					{
+						if (sourceModelInfluence.Weight > 0)
+						{
+							sourceModelInfluence.BoneIndex++;
+						}
+					}
+				}
 
-        // adapt LOD sections
-        if (skeletalMesh->IsLODImportedDataBuildAvailable(LODIndex) && !skeletalMesh->IsLODImportedDataEmpty(LODIndex))
-        {
-          FSkeletalMeshImportData skeletalMeshImportData;
-          skeletalMesh->LoadLODImportedData(LODIndex, skeletalMeshImportData);
+				// adapt LOD sections
+				if (skeletalMesh->HasMeshDescription(LODIndex))
+				{
+					FSkeletalMeshImportData skeletalMeshImportData = FSkeletalMeshImportData::CreateFromMeshDescription(*skeletalMesh->GetMeshDescription(LODIndex));
 
-          // increase parent indices to sucessfully add the new root bone
-          int32 numRootBoneChilds = 0;
-          for (auto& referenceBoneBinary : skeletalMeshImportData.RefBonesBinary)
-          {
-            if (referenceBoneBinary.ParentIndex == INDEX_NONE)
-            {
-              numRootBoneChilds += referenceBoneBinary.NumChildren;
-            }
-            referenceBoneBinary.ParentIndex++;
-          }
+					// increase parent indices to sucessfully add the new root bone
+					int32 numRootBoneChilds = 0;
+					for (auto& referenceBoneBinary : skeletalMeshImportData.RefBonesBinary)
+					{
+						if (referenceBoneBinary.ParentIndex == INDEX_NONE)
+						{
+							numRootBoneChilds += referenceBoneBinary.NumChildren;
+						}
+						referenceBoneBinary.ParentIndex++;
+					}
 
-          const SkeletalMeshImportData::FJointPos rootBonePosition = { FTransform3f::Identity, 1.f, 100.f, 100.f, 100.f };
-          const SkeletalMeshImportData::FBone rootBone = { gs_rootBoneName.ToString(), 0, numRootBoneChilds, INDEX_NONE, rootBonePosition };
-          skeletalMeshImportData.RefBonesBinary.Insert(rootBone, 0);
+					const SkeletalMeshImportData::FJointPos rootBonePosition = {FTransform3f::Identity, 1.f, 100.f, 100.f, 100.f};
+					const SkeletalMeshImportData::FBone rootBone = {gs_rootBoneName.ToString(), 0, numRootBoneChilds, INDEX_NONE, rootBonePosition};
+					skeletalMeshImportData.RefBonesBinary.Insert(rootBone, 0);
 
-          // increase bone influences to sucessfully add the new root bone
-          for (auto& influence : skeletalMeshImportData.Influences)
-          {
-            influence.BoneIndex++;
-          }
+					// increase bone influences to sucessfully add the new root bone
+					for (auto& influence : skeletalMeshImportData.Influences)
+					{
+						influence.BoneIndex++;
+					}
 
-          if (skeletalMeshImportData.MorphTargets.Num() > 0)
-          {
-            //! @todo @ffs is it possible to support morph targets?
-            UE_LOG(LogTemp, Warning, TEXT("MorphTargets are currently not supported."));
-          }
+					if (skeletalMeshImportData.MorphTargets.Num() > 0)
+					{
+						//! @todo @ffs is it possible to support morph targets?
+						UE_LOG(LogTemp, Warning, TEXT("MorphTargets are currently not supported."));
+					}
 
-          if (skeletalMeshImportData.AlternateInfluences.Num() > 0)
-          {
-            //! @todo @ffs is it possible to support alternate influences?
-            UE_LOG(LogTemp, Warning, TEXT("AlternateInfluences are currently not supported."));
-          }
+					if (skeletalMeshImportData.AlternateInfluences.Num() > 0)
+					{
+						//! @todo @ffs is it possible to support alternate influences?
+						UE_LOG(LogTemp, Warning, TEXT("AlternateInfluences are currently not supported."));
+					}
 
-          skeletalMesh->SaveLODImportedData(LODIndex, skeletalMeshImportData);
-        }
-        else
-        {
-          for (auto& LODSection : skeletalMeshLODModel.Sections)
-          {
-            // increase bone indices to sucessfully register the new root bone
-            for (auto& boneIndex : LODSection.BoneMap)
-            {
-              boneIndex++;
-            }
-          }
-        }
+					FMeshDescription Desc;
+					skeletalMeshImportData.GetMeshDescription(nullptr, &skeletalMesh->GetLODInfo(LODIndex)->BuildSettings, Desc);
+					skeletalMesh->CreateMeshDescription(LODIndex, MoveTemp(Desc));
+					skeletalMesh->CommitMeshDescription(LODIndex);
+				}
+				else
+				{
+					for (auto& LODSection : skeletalMeshLODModel.Sections)
+					{
+						// increase bone indices to sucessfully register the new root bone
+						for (auto& boneIndex : LODSection.BoneMap)
+						{
+							boneIndex++;
+						}
+					}
+				}
 
-        ++LODIndex;
-      }
+				++LODIndex;
+			}
 
-      if (modifiedSkeletalMeshes == 0)
-      {
-        if (!(Skeleton->RecreateBoneTree(skeletalMesh)))
-        {
-          UE_LOG(LogTemp, Error, TEXT("Final step of recreating the bone tree failed for skeleton asset \"%s\". Please raise a issue here: https://github.com/tuatec/TTToolbox/issues."), *(skeletalMesh->GetPathName()));
-        }
-      }
-      else
-      {
-        // the mesh got new bones and now it is necessary to merge those bones into the USkeleton asset as well
-        if (!(Skeleton->MergeAllBonesToBoneTree(skeletalMesh)))
-        {
-          UE_LOG(LogTemp, Error, TEXT("The final step of merging all bones for the skeletal mesh \"%s\"into the bone failed. Please create an issue here https://github.com/tuatec/TTToolbox/issues."), *(skeletalMesh->GetPathName()));
-        }
-      }
+			if (modifiedSkeletalMeshes == 0)
+			{
+				if (!(Skeleton->RecreateBoneTree(skeletalMesh)))
+				{
+					UE_LOG(LogTemp, Error, TEXT("Final step of recreating the bone tree failed for skeleton asset \"%s\". Please raise a issue here: https://github.com/tuatec/TTToolbox/issues."), *(skeletalMesh->GetPathName()));
+				}
+			}
+			else
+			{
+				// the mesh got new bones and now it is necessary to merge those bones into the USkeleton asset as well
+				if (!(Skeleton->MergeAllBonesToBoneTree(skeletalMesh)))
+				{
+					UE_LOG(LogTemp, Error, TEXT("The final step of merging all bones for the skeletal mesh \"%s\"into the bone failed. Please create an issue here https://github.com/tuatec/TTToolbox/issues."), *(skeletalMesh->GetPathName()));
+				}
+			}
 
-      // through caching reasons the USkeleton has internally a mapping table between skeletal meshes and the skeleton,
-      // as new bones were added this table is not valid anymore ==> force rebuilding of that table!
-      // Sadly none of these methods is exposed for plugin developers :(
-      // - USkeleton::HandleVirtualBoneChanges
-      // - USkeleton::RebuildLinkup
-      // - USkeleton::RemoveLinkup
-      //
-      // But happily adding and removing virtual bones call internall USkeleton::HandleVirtualBoneChanges,
-      // which should rebuild the mapping table ;-)
-      FName virtualBoneName = *(gs_rootBoneName.ToString() + "_delete_me");
-      if (!Skeleton->AddNewVirtualBone(gs_rootBoneName, gs_rootBoneName, virtualBoneName))
-      {
-        UE_LOG(LogTemp, Error, TEXT("failed to add dirty virtual bone hack to force the rebuild of the bone mapping table of skeleton \"%s\""), *Skeleton->GetPathName());
-      }
-      Skeleton->RemoveVirtualBones({ virtualBoneName });
+			// through caching reasons the USkeleton has internally a mapping table between skeletal meshes and the skeleton,
+			// as new bones were added this table is not valid anymore ==> force rebuilding of that table!
+			// Sadly none of these methods is exposed for plugin developers :(
+			// - USkeleton::HandleVirtualBoneChanges
+			// - USkeleton::RebuildLinkup
+			// - USkeleton::RemoveLinkup
+			//
+			// But happily adding and removing virtual bones call internall USkeleton::HandleVirtualBoneChanges,
+			// which should rebuild the mapping table ;-)
+			FName virtualBoneName = *(gs_rootBoneName.ToString() + "_delete_me");
+			if (!Skeleton->AddNewVirtualBone(gs_rootBoneName, gs_rootBoneName, virtualBoneName))
+			{
+				UE_LOG(LogTemp, Error, TEXT("failed to add dirty virtual bone hack to force the rebuild of the bone mapping table of skeleton \"%s\""), *Skeleton->GetPathName());
+			}
+			Skeleton->RemoveVirtualBones({virtualBoneName});
 
-      skeletalMesh->PostEditChange();
-      skeletalMesh->Modify();
-      modifiedSkeletalMeshes++;
-    }
-  }
+			skeletalMesh->PostEditChange();
+			skeletalMesh->Modify();
+			modifiedSkeletalMeshes++;
+		}
+	}
 
-  // finally readd the virtual bones again to savely store everything
-  if (savedVirtualBones.Num() > 0)
-  {
-    for (auto& virtualBone : savedVirtualBones)
-    {
-      if (!UTTToolboxBlueprintLibrary::AddVirtualBone(virtualBone.VirtualBoneName, virtualBone.SourceBoneName, virtualBone.TargetBoneName, Skeleton))
-      {
-        UE_LOG(LogTemp, Error, TEXT("Internal error! Failed to add virtual bone \"%s\" again please raise a issue here: https://github.com/tuatec/TTToolbox/issues."), *virtualBone.VirtualBoneName.ToString());
-      }
-    }
-  }
+	// finally readd the virtual bones again to savely store everything
+	if (savedVirtualBones.Num() > 0)
+	{
+		for (auto& virtualBone : savedVirtualBones)
+		{
+			if (!UTTToolboxBlueprintLibrary::AddVirtualBone(virtualBone.VirtualBoneName, virtualBone.SourceBoneName, virtualBone.TargetBoneName, Skeleton))
+			{
+				UE_LOG(LogTemp, Error, TEXT("Internal error! Failed to add virtual bone \"%s\" again please raise a issue here: https://github.com/tuatec/TTToolbox/issues."), *virtualBone.VirtualBoneName.ToString());
+			}
+		}
+	}
 
-  if (modifiedSkeletalMeshes > 0)
-  {
-    Skeleton->Modify();
-  }
+	if (modifiedSkeletalMeshes > 0)
+	{
+		Skeleton->Modify();
+	}
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::UpdateControlRigBlueprintPreviewMesh(UControlRigBlueprint* ControlRigBlueprint, USkeletalMesh* SkeletalMesh)
 {
-    if (!IsValid(ControlRigBlueprint))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"UpdateControlRigBlueprintPreviewMesh\" with invalid \"ControlRigBlueprint\"."));
-        return false;
-    }
+	if (!IsValid(ControlRigBlueprint))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"UpdateControlRigBlueprintPreviewMesh\" with invalid \"ControlRigBlueprint\"."));
+		return false;
+	}
 
-    if (!IsValid(SkeletalMesh))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Called \"UpdateControlRigBlueprintPreviewMesh\" with invalid \"SkeletalMesh\"."));
-        return false;
-    }
+	if (!IsValid(SkeletalMesh))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"UpdateControlRigBlueprintPreviewMesh\" with invalid \"SkeletalMesh\"."));
+		return false;
+	}
 
-    ControlRigBlueprint->SetPreviewMesh(SkeletalMesh, true);
+	ControlRigBlueprint->SetPreviewMesh(SkeletalMesh, true);
 
-    URigHierarchyController* controller = ControlRigBlueprint->GetHierarchyController();
-    check(controller);
+	URigHierarchyController* controller = ControlRigBlueprint->GetHierarchyController();
+	check(controller);
 
-    controller->ImportBones(SkeletalMesh->GetSkeleton(), NAME_None, true, true, /*bSelectBones*/false, true, true);
-    controller->ImportCurves(SkeletalMesh->GetSkeleton(), NAME_None, false, true, true);
+	controller->ImportBones(SkeletalMesh->GetSkeleton(), NAME_None, true, true, /*bSelectBones*/false, true, true);
+	controller->ImportCurves(SkeletalMesh->GetSkeleton(), NAME_None, false, true, true);
 
-    return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::CopyAnimMontageCurves(UAnimSequenceBase* SourceAnimMontage, UAnimMontage* TargetAnimMontage)
 {
-  // check input arguments
-  if (!IsValid(SourceAnimMontage) || !IsValid(TargetAnimMontage))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"CopyAnimMontageCurves\" with invalid SourceAnimMontage or TargetAnimMontage."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(SourceAnimMontage) || !IsValid(TargetAnimMontage))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"CopyAnimMontageCurves\" with invalid SourceAnimMontage or TargetAnimMontage."));
+		return false;
+	}
 
-  // curves should be copied over so all existing curves need to be removed
-  auto& targetController = TargetAnimMontage->GetController();
-  targetController.RemoveAllCurvesOfType(ERawCurveTrackTypes::RCT_Float);
+	// curves should be copied over so all existing curves need to be removed
+	auto& targetController = TargetAnimMontage->GetController();
+	targetController.RemoveAllCurvesOfType(ERawCurveTrackTypes::RCT_Float);
 
-  for (auto& sourceCurve : SourceAnimMontage->GetCurveData().FloatCurves)
-  {
-    const FAnimationCurveIdentifier curveId = FAnimationCurveIdentifier(sourceCurve.GetName(), ERawCurveTrackTypes::RCT_Float);
-    targetController.AddCurve(curveId);
-    targetController.SetCurveKeys(curveId, sourceCurve.FloatCurve.GetConstRefOfKeys());
-  }
+	for (auto& sourceCurve : SourceAnimMontage->GetCurveData().FloatCurves)
+	{
+		const FAnimationCurveIdentifier curveId = FAnimationCurveIdentifier(sourceCurve.GetName(), ERawCurveTrackTypes::RCT_Float);
+		targetController.AddCurve(curveId);
+		targetController.SetCurveKeys(curveId, sourceCurve.FloatCurve.GetConstRefOfKeys());
+	}
 
-  // modify the TargetAnimMontage
-  TargetAnimMontage->Modify();
+	// modify the TargetAnimMontage
+	TargetAnimMontage->Modify();
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::DumpIKChains(const UIKRigDefinition* IKRigDefinition)
 {
-  // check input arguments
-  if (!IsValid(IKRigDefinition))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"DumpIKChains\" with invalid IKRigDefinition."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(IKRigDefinition))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpIKChains\" with invalid IKRigDefinition."));
+		return false;
+	}
 
-  if (IKRigDefinition->GetRetargetChains().Num() <= 0)
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"DumpIKChains\" with invalid IKRigDefinition %s, which did not provide any IK chains."), *(IKRigDefinition->GetFullName()));
-    return false;
-  }
+	if (IKRigDefinition->GetRetargetChains().Num() <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"DumpIKChains\" with invalid IKRigDefinition %s, which did not provide any IK chains."), *(IKRigDefinition->GetFullName()));
+		return false;
+	}
 
-  // prepare the dump string
-  FString dumpString;
-  if (IKRigDefinition->GetRetargetChains().Num() > 1)
-  {
-    dumpString += "(";
-  }
+	// prepare the dump string
+	FString dumpString;
+	if (IKRigDefinition->GetRetargetChains().Num() > 1)
+	{
+		dumpString += "(";
+	}
 
-  // iterate over all IK chains
-  uint32 count = 0;
-  for (auto& boneChain : IKRigDefinition->GetRetargetChains())
-  {
-    if (count > 0)
-    {
-      dumpString += ",";
-    }
+	// iterate over all IK chains
+	uint32 count = 0;
+	for (auto& boneChain : IKRigDefinition->GetRetargetChains())
+	{
+		if (count > 0)
+		{
+			dumpString += ",";
+		}
 
-    dumpString += "(";
+		dumpString += "(";
 
-    dumpString += "ChainName=\"";
-    dumpString += boneChain.ChainName.ToString();
-    dumpString += "\",";
+		dumpString += "ChainName=\"";
+		dumpString += boneChain.ChainName.ToString();
+		dumpString += "\",";
 
-    dumpString += "StartBone=\"";
-    dumpString += boneChain.StartBone.BoneName.ToString();
-    dumpString += "\",";
+		dumpString += "StartBone=\"";
+		dumpString += boneChain.StartBone.BoneName.ToString();
+		dumpString += "\",";
 
-    dumpString += "EndBone=\"";
-    dumpString += boneChain.EndBone.BoneName.ToString();
-    dumpString += "\",";
+		dumpString += "EndBone=\"";
+		dumpString += boneChain.EndBone.BoneName.ToString();
+		dumpString += "\",";
 
-    dumpString += "IKGoalName=\"";
-    dumpString += boneChain.IKGoalName.ToString();
-    dumpString += "\"";
+		dumpString += "IKGoalName=\"";
+		dumpString += boneChain.IKGoalName.ToString();
+		dumpString += "\"";
 
-    dumpString += ")";
+		dumpString += ")";
 
-    count++;
-  }
+		count++;
+	}
 
-  if (IKRigDefinition->GetRetargetChains().Num() > 1)
-  {
-    dumpString += ")";
-  }
+	if (IKRigDefinition->GetRetargetChains().Num() > 1)
+	{
+		dumpString += ")";
+	}
 
-  // print the IK chains to the log
-  UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
+	// print the IK chains to the log
+	UE_LOG(LogTemp, Log, TEXT("%s"), *dumpString);
 
-  // store the IK chains in the clipboard
+	// store the IK chains in the clipboard
 #if WITH_EDITOR
-  FPlatformApplicationMisc::ClipboardCopy(*dumpString);
+	FPlatformApplicationMisc::ClipboardCopy(*dumpString);
 #endif
 
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::AddIKBoneChains(UIKRigDefinition* IKRigDefinition, const TArray<FBoneChain_BP>& BoneChains)
 {
-  // check input arguments
-  if (!IsValid(IKRigDefinition))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"AddIKBoneChains\" with invalid IKRigDefinition."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(IKRigDefinition))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"AddIKBoneChains\" with invalid IKRigDefinition."));
+		return false;
+	}
 
-  auto ikRigController = UIKRigController::GetController(IKRigDefinition);
-  if (!IsValid(ikRigController))
-  {
-    UE_LOG(LogTemp, Error, TEXT("During getting the IKRigController for %s in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
-    return false;
-  }
+	auto ikRigController = UIKRigController::GetController(IKRigDefinition);
+	if (!IsValid(ikRigController))
+	{
+		UE_LOG(LogTemp, Error, TEXT("During getting the IKRigController for %s in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
+		return false;
+	}
 
-  // delete all existing retarget chains
-  {
-    //auto retargetChains = ikRigController->GetRetargetChains();
-    for (auto& retargetChain : ikRigController->GetRetargetChains())
-    {
-      if (!ikRigController->RemoveRetargetChain(retargetChain.ChainName))
-      {
-        UE_LOG(LogTemp, Error, TEXT("Removing %s retarget chain in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
-      }
-    }
-  }
+	// delete all existing retarget chains
+	{
+		//auto retargetChains = ikRigController->GetRetargetChains();
+		for (auto& retargetChain : ikRigController->GetRetargetChains())
+		{
+			if (!ikRigController->RemoveRetargetChain(retargetChain.ChainName))
+			{
+				UE_LOG(LogTemp, Error, TEXT("Removing %s retarget chain in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
+			}
+		}
+	}
 
-  // add the new IK chains
-  for (auto& boneChain : BoneChains)
-  {
-    if (IKRigDefinition->GetRetargetChainByName(boneChain.ChainName))
-    {
-      UE_LOG(LogTemp, Error, TEXT("Adding %s retarget chain in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
-      continue;
-    }
+	// add the new IK chains
+	for (auto& boneChain : BoneChains)
+	{
+		if (IKRigDefinition->GetRetargetChainByName(boneChain.ChainName))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Adding %s retarget chain in \"AddIKBoneChains\" failed."), *(IKRigDefinition->GetFullName()));
+			continue;
+		}
 
 #if ENGINE_MAJOR_VERSION ==	5 &&  ENGINE_MINOR_VERSION < 1
     ikRigController->AddRetargetChain(boneChain.ChainName, boneChain.StartBone, boneChain.EndBone);
 #elif ENGINE_MAJOR_VERSION ==	5 &&  ENGINE_MINOR_VERSION >= 1
-    ikRigController->AddRetargetChain({ boneChain.ChainName, boneChain.StartBone, boneChain.EndBone, boneChain.IKGoalName });
+		ikRigController->AddRetargetChain(boneChain.ChainName, boneChain.StartBone, boneChain.EndBone, boneChain.IKGoalName);
 #endif
+	}
 
-  }
-
-  return true;
+	return true;
 }
 
 bool UTTToolboxBlueprintLibrary::SetIKBoneChainGoal(UIKRigDefinition* IKRigDefinition, const FName& ChainName, const FName& GoalName)
 {
-  // check input arguments
-  if (!IsValid(IKRigDefinition))
-  {
-    UE_LOG(LogTemp, Error, TEXT("Called \"SetIKBoneChainGoal\" with invalid IKRigDefinition."));
-    return false;
-  }
+	// check input arguments
+	if (!IsValid(IKRigDefinition))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Called \"SetIKBoneChainGoal\" with invalid IKRigDefinition."));
+		return false;
+	}
 
-  // get the IK rig controller
-  auto ikRigController = UIKRigController::GetController(IKRigDefinition);
-  if (!IsValid(ikRigController))
-  {
-    UE_LOG(LogTemp, Error, TEXT("During getting the IKRigController for %s in \"SetIKBoneChainGoal\" failed."), *(IKRigDefinition->GetFullName()));
-    return false;
-  }
+	// get the IK rig controller
+	auto ikRigController = UIKRigController::GetController(IKRigDefinition);
+	if (!IsValid(ikRigController))
+	{
+		UE_LOG(LogTemp, Error, TEXT("During getting the IKRigController for %s in \"SetIKBoneChainGoal\" failed."), *(IKRigDefinition->GetFullName()));
+		return false;
+	}
 
-  // check if the ik chain is present in the IKRigDefinition
-  if (!ikRigController->GetGoal(GoalName))
-  {
-    return false;
-  }
+	// check if the ik chain is present in the IKRigDefinition
+	if (!ikRigController->GetGoal(GoalName))
+	{
+		return false;
+	}
 
-  // set the IK goal within the IK chain
-  return ikRigController->SetRetargetChainGoal(ChainName, GoalName);
+	// set the IK goal within the IK chain
+	return ikRigController->SetRetargetChainGoal(ChainName, GoalName);
 }
 
 // helper function implementations
 FString FVectorToString(const FVector& Vector)
 {
-  FString str = "X=";
-  str += FString::SanitizeFloat(Vector.X);
-  str += ",Y=";
-  str += FString::SanitizeFloat(Vector.Y);
-  str += ",Z=";
-  str += FString::SanitizeFloat(Vector.Z);
+	FString str = "X=";
+	str += FString::SanitizeFloat(Vector.X);
+	str += ",Y=";
+	str += FString::SanitizeFloat(Vector.Y);
+	str += ",Z=";
+	str += FString::SanitizeFloat(Vector.Z);
 
-  return str;
+	return str;
 }
 
 static TArray<USkeletalMesh*> getAllSkeletalMeshes(USkeleton* Skeleton)
 {
-  check(IsValid(Skeleton));
+	check(IsValid(Skeleton));
 
-  TArray<USkeletalMesh*> skeletalMeshes;
+	TArray<USkeletalMesh*> skeletalMeshes;
 
-  FARFilter filter;
-  filter.ClassPaths.Add(USkeletalMesh::StaticClass()->GetClassPathName());
-  filter.bRecursiveClasses = true;
-  const FString skeletonString = FAssetData(Skeleton).GetExportTextName();
-  filter.TagsAndValues.Add(USkeletalMesh::GetSkeletonMemberName(), skeletonString);
-  FAssetRegistryModule& assetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	FARFilter filter;
+	filter.ClassPaths.Add(USkeletalMesh::StaticClass()->GetClassPathName());
+	filter.bRecursiveClasses = true;
+	const FString skeletonString = FAssetData(Skeleton).GetExportTextName();
+	filter.TagsAndValues.Add(USkeletalMesh::GetSkeletonMemberName(), skeletonString);
+	FAssetRegistryModule& assetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 
-  TArray<FAssetData> assets;
-  assetRegistryModule.Get().GetAssets(filter, assets);
+	TArray<FAssetData> assets;
+	assetRegistryModule.Get().GetAssets(filter, assets);
 
-  for (auto& asset : assets)
-  {
-    if (auto skeletalMesh = Cast<USkeletalMesh>(asset.GetAsset()))
-    {
-      skeletalMeshes.Add(skeletalMesh);
-    }
-  }
+	for (auto& asset : assets)
+	{
+		if (auto skeletalMesh = Cast<USkeletalMesh>(asset.GetAsset()))
+		{
+			skeletalMeshes.Add(skeletalMesh);
+		}
+	}
 
-  return skeletalMeshes;
+	return skeletalMeshes;
 }
