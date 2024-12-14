@@ -33,7 +33,7 @@ private: // methods
 
 public: // members
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
-	UAnimSequence* SourceSequence = nullptr;
+	TObjectPtr<UAnimSequence> SourceSequence = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Settings")
 	bool ReplaceExistingCurves = false;
