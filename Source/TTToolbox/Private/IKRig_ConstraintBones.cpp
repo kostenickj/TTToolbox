@@ -20,6 +20,8 @@
 
 #include "IKRig_ConstraintBones.h"
 
+#include "Rig/IKRigSkeleton.h"
+
 #define LOCTEXT_NAMESPACE "UIKRig_BoneConstrainer"
 
 UIKRig_ConstraintBones::UIKRig_ConstraintBones() {}

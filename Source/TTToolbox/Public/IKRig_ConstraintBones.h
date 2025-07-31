@@ -22,7 +22,7 @@
 
 // Unreal Engine includes
 #include "CoreMinimal.h"
-#include "Rig/Solvers/IKRigSolver.h"
+#include "Rig/Solvers/IKRigSolverBase.h"
 
 #include "IKRig_ConstraintBones.generated.h"
 
